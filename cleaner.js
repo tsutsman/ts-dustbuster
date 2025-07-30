@@ -18,8 +18,15 @@ async function removeDirContents(dir) {
 
 async function clean() {
   const targets = [os.tmpdir()];
-  if (process.platform === 'win32' && process.env.WINDIR) {
-    targets.push(path.join(process.env.WINDIR, 'Temp'));
+  if (process.platform === 'win32') {
+    const winDir = process.env.WINDIR || 'C:/Windows';
+    targets.push(path.join(winDir, 'Temp'));
+    targets.push(path.join(winDir, 'Prefetch'));
+    targets.push(path.join(winDir, 'SoftwareDistribution', 'Download'));
+    targets.push(path.join(winDir, 'System32', 'LogFiles'));
+    if (process.env.SystemDrive) {
+      targets.push(path.join(process.env.SystemDrive, 'Temp'));
+    }
   } else {
     targets.push('/var/tmp');
   }
