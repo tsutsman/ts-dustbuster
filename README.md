@@ -18,4 +18,6 @@ cleaner.cmd
 
 В обох випадках викликається Node.js-скрипт `cleaner.js`, який видаляє вміст стандартних тимчасових директорій (наприклад, `/tmp` у Linux та `%TEMP%` у Windows).
 
+Починаючи з версії 1.1 скрипт під Linux також очищає каталоги `/var/tmp`, `/var/cache/apt/archives` та `~/.cache` при їх наявності.
+
 Скрипти автоматично перевіряють наявність Node.js і за потреби встановлюють його. Під Windows додатково очищаються системні каталоги `Prefetch`, `SoftwareDistribution\\Download` та `System32\\LogFiles`.

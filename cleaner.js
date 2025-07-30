@@ -3,6 +3,12 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+function pushIfExists(list, dir) {
+  if (fs.existsSync(dir)) {
+    list.push(dir);
+  }
+}
+
 async function removeDirContents(dir) {
   try {
     const entries = await fs.promises.readdir(dir);
@@ -17,18 +23,22 @@ async function removeDirContents(dir) {
 }
 
 async function clean() {
-  const targets = [os.tmpdir()];
+  const targets = [];
+  pushIfExists(targets, os.tmpdir());
   if (process.platform === 'win32') {
     const winDir = process.env.WINDIR || 'C:/Windows';
-    targets.push(path.join(winDir, 'Temp'));
-    targets.push(path.join(winDir, 'Prefetch'));
-    targets.push(path.join(winDir, 'SoftwareDistribution', 'Download'));
-    targets.push(path.join(winDir, 'System32', 'LogFiles'));
+    pushIfExists(targets, path.join(winDir, 'Temp'));
+    pushIfExists(targets, path.join(winDir, 'Prefetch'));
+    pushIfExists(targets, path.join(winDir, 'SoftwareDistribution', 'Download'));
+    pushIfExists(targets, path.join(winDir, 'System32', 'LogFiles'));
     if (process.env.SystemDrive) {
-      targets.push(path.join(process.env.SystemDrive, 'Temp'));
+      pushIfExists(targets, path.join(process.env.SystemDrive, 'Temp'));
     }
   } else {
-    targets.push('/var/tmp');
+    pushIfExists(targets, '/var/tmp');
+    pushIfExists(targets, '/var/cache/apt/archives');
+    pushIfExists(targets, '/var/cache/apt/archives/partial');
+    pushIfExists(targets, path.join(os.homedir(), '.cache'));
   }
   for (const dir of targets) {
     await removeDirContents(dir);
