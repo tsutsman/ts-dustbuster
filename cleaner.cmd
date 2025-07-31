@@ -9,5 +9,13 @@ if %ERRORLEVEL% NEQ 0 (
       "Invoke-WebRequest -Uri $url -OutFile $out;" ^
       "Start-Process msiexec -ArgumentList '/i',$out,'/qn' -Wait;" ^
       "Remove-Item $out;"
+    echo Встановлення Node.js завершено.
 )
+echo Запуск очищення...
 node "%~dp0cleaner.js" %*
+if %ERRORLEVEL% EQU 0 (
+    echo Очищення завершено успішно.
+) else (
+    echo Під час очищення виникла помилка. Код %ERRORLEVEL%.
+)
+pause
