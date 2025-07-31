@@ -9,4 +9,4 @@ if %ERRORLEVEL% NEQ 0 (
       "Start-Process msiexec -ArgumentList '/i',$out,'/qn' -Wait;" ^
       "Remove-Item $out;"
 )
-node "%~dp0cleaner.js"
+node "%~dp0cleaner.js" %*
