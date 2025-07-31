@@ -14,4 +14,4 @@ if ! command -v node >/dev/null 2>&1; then
   fi
 fi
 
-node "$(dirname "$0")/cleaner.js"
+node "$(dirname "$0")/cleaner.js" "$@"
