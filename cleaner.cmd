@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 where node >nul 2>nul
 if %ERRORLEVEL% NEQ 0 (
     echo Node.js не знайдено. Завантаження та встановлення...
