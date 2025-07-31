@@ -6,6 +6,7 @@ const { pushIfExists, removeDirContents, parseArgs, getOptions } = require('./cl
 
 (async () => {
   // Тест pushIfExists
+  // Test for pushIfExists
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'db-test-'));
   const list = [];
   pushIfExists(list, tmp);
@@ -14,6 +15,7 @@ const { pushIfExists, removeDirContents, parseArgs, getOptions } = require('./cl
   assert.strictEqual(list.length, 1, 'Неіснуючий каталог не додається');
 
   // Тест removeDirContents
+  // Test for removeDirContents
   const file = path.join(tmp, 'a.txt');
   fs.writeFileSync(file, 'data');
   const sub = path.join(tmp, 'sub');
@@ -25,6 +27,7 @@ const { pushIfExists, removeDirContents, parseArgs, getOptions } = require('./cl
   fs.rmdirSync(tmp);
 
   // Тест parseArgs
+  // Test for parseArgs
   parseArgs(['--dry-run', '--parallel', '--deep']);
   const opts = getOptions();
   assert.ok(opts.dryRun, 'dry-run має бути увімкнено');
