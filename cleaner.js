@@ -2,6 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { execSync } = require('child_process');
 
 // мінімально сумісна версія Node.js
 const MIN_NODE_MAJOR = 16;
@@ -9,6 +10,7 @@ const MIN_NODE_MAJOR = 16;
 // змінні керування
 let dryRun = false;
 let parallel = false;
+let deepClean = false;
 let logFile = null;
 const extraDirs = [];
 
@@ -25,14 +27,56 @@ function pushIfExists(list, dir) {
   }
 }
 
-function parseArgs() {
-  const args = process.argv.slice(2);
+function isAdmin() {
+  try {
+    execSync('net session >nul 2>&1');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function advancedWindowsClean() {
+  if (!isAdmin()) {
+    console.error('Для глибокого очищення потрібні адмінські права');
+    return;
+  }
+  try {
+    execSync('PowerShell -NoLogo -NoProfile -Command "Clear-RecycleBin -Force"', { stdio: 'inherit' });
+  } catch {}
+  try {
+    execSync('dism /online /Cleanup-Image /StartComponentCleanup /ResetBase', { stdio: 'inherit' });
+  } catch {}
+  try {
+    execSync('RunDll32.exe InetCpl.cpl,ClearMyTracksByProcess 8', { stdio: 'inherit' });
+  } catch {}
+  try {
+    const logs = execSync('wevtutil.exe el', { encoding: 'utf8' })
+      .trim().split(/\r?\n/);
+    logs.forEach(log => {
+      if (log) {
+        try { execSync(`wevtutil.exe cl "${log}"`); } catch {}
+      }
+    });
+  } catch {}
+  try {
+    execSync('net stop wuauserv', { stdio: 'inherit' });
+    execSync('net stop bits', { stdio: 'inherit' });
+    fs.rmSync(path.join(process.env.WINDIR || 'C:/Windows', 'SoftwareDistribution'), { recursive: true, force: true });
+    execSync('net start wuauserv', { stdio: 'inherit' });
+    execSync('net start bits', { stdio: 'inherit' });
+  } catch {}
+}
+
+function parseArgs(args = process.argv.slice(2)) {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === '--dry-run') {
       dryRun = true;
     } else if (a === '--parallel') {
       parallel = true;
+    } else if (a === '--deep') {
+      deepClean = true;
     } else if (a === '--log' && args[i + 1]) {
       logFile = args[++i];
     } else if (a === '--dir' && args[i + 1]) {
@@ -102,6 +146,10 @@ async function clean() {
       await t;
     }
   }
+
+  if (deepClean && process.platform === 'win32') {
+    advancedWindowsClean();
+  }
 }
 
 parseArgs();
@@ -117,4 +165,8 @@ if (require.main === module) {
   });
 }
 
-module.exports = { pushIfExists, removeDirContents };
+function getOptions() {
+  return { dryRun, parallel, deepClean, logFile, extraDirs };
+}
+
+module.exports = { pushIfExists, removeDirContents, parseArgs, advancedWindowsClean, getOptions };
