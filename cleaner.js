@@ -5,14 +5,17 @@ const os = require('os');
 const { execSync } = require('child_process');
 
 // мінімально сумісна версія Node.js
+// minimum supported Node.js version
 const MIN_NODE_MAJOR = 16;
 
 // змінні керування
+// control variables
 let dryRun = false;
 let parallel = false;
 let deepClean = false;
 let logFile = null;
 const extraDirs = [];
+// additional directories to clean
 
 function log(msg) {
   console.log(msg);
