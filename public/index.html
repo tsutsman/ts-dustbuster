@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <title>ts-dustbuster GUI</title>
+</head>
+<body>
+  <button id="run">Очистити тимчасові файли</button>
+  <pre id="out"></pre>
+  <script>
+    document.getElementById('run').onclick = async () => {
+      const res = await fetch('/clean', { method: 'POST' });
+      document.getElementById('out').textContent = await res.text();
+    };
+  </script>
+</body>
+</html>

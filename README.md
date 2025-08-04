@@ -56,3 +56,13 @@ The `cleaner.js` script supports several command-line options:
 - `--config <file>` — JSON file with a `dirs` array of paths.
 - `--log <файл>` — зберігати інформацію про виконання у вказаний файл.
 - `--log <file>` — store execution information in the specified file.
+
+### Графічний режим
+
+Для запуску простого веб‑інтерфейсу виконайте:
+
+```bash
+node gui.js
+```
+
+Після цього відкрийте у браузері `http://localhost:3000` та натисніть кнопку очищення.
