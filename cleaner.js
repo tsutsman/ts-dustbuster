@@ -172,4 +172,5 @@ function getOptions() {
   return { dryRun, parallel, deepClean, logFile, extraDirs };
 }
 
-module.exports = { pushIfExists, removeDirContents, parseArgs, advancedWindowsClean, getOptions };
+// експортуємо clean для повторного використання у GUI
+module.exports = { pushIfExists, removeDirContents, parseArgs, advancedWindowsClean, getOptions, clean };
