@@ -38,6 +38,9 @@ In both cases the Node.js script `cleaner.js` is executed. It removes contents o
 Починаючи з версії 1.1 скрипт під Linux також очищає каталоги `/var/tmp`, `/var/cache/apt/archives` та `~/.cache` при їх наявності.
 Since version 1.1 the Linux script also cleans `/var/tmp`, `/var/cache/apt/archives` and `~/.cache` if they exist.
 
+У поточній версії додатково перевіряються типові кеші браузерів (Chrome, Edge) та менеджерів пакетів (npm, yarn, pip) на Windows, macOS і Linux — вони очищаються лише за наявності.
+In the current version the tool also targets common caches of browsers (Chrome, Edge) and package managers (npm, yarn, pip) on Windows, macOS and Linux — they are cleaned only when present.
+
 Скрипти автоматично перевіряють наявність Node.js і за потреби встановлюють його. Під Windows додатково очищаються системні каталоги `Prefetch`, `SoftwareDistribution\Download` та `System32\LogFiles`. Під macOS для встановлення використовується Homebrew, якщо він наявний.
 The scripts automatically check for Node.js and install it if needed. On Windows the system folders `Prefetch`, `SoftwareDistribution\Download` and `System32\LogFiles` are cleaned as well. On macOS installation is done via Homebrew when available.
 
@@ -56,6 +59,18 @@ The `cleaner.js` script supports several command-line options:
 - `--config <file>` — JSON file with a `dirs` array of paths.
 - `--log <файл>` — зберігати інформацію про виконання у вказаний файл.
 - `--log <file>` — store execution information in the specified file.
+- `--summary` — наприкінці показати підсумок із кількістю видалених файлів/тек та звільненим місцем.
+- `--summary` — print a summary with the number of removed files/folders and reclaimed space.
+- `--max-age <тривалість>` — видаляти лише елементи, старші за задану тривалість (наприклад, `12h`, `30m`, `5d`; без суфікса — години).
+- `--max-age <duration>` — delete only items older than the given duration (for example `12h`, `30m`, `5d`; default unit is hours when no suffix is provided).
+- `--exclude <шлях>` — ігнорувати вказаний шлях та його вміст під час очищення.
+- `--exclude <path>` — skip the specified path (and its contents) during cleanup.
+
+Поле `--config` тепер може містити не лише список директорій, а й опції `exclude`, `maxAge`, `summary`, `parallel`, `dryRun`, `deep`, `logFile`. Відносні шляхи всередині конфігурації інтерпретуються відносно каталогу цього файлу.
+The `--config` option can now include not only `dirs`, but also `exclude`, `maxAge`, `summary`, `parallel`, `dryRun`, `deep`, `logFile`. Relative paths in the configuration are resolved against the file location.
+
+Під час очищення збирається статистика: кількість видалених файлів, тек, пропущених елементів та звільнений простір. За прапорцем `--summary` ці дані виводяться наприкінці роботи.
+During cleanup the tool gathers statistics: number of removed files, folders, skipped entries and reclaimed space. With the `--summary` flag this information is printed at the end of execution.
 
 ### Графічний режим
 
