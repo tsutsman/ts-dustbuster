@@ -2,7 +2,15 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { pushIfExists, removeDirContents, parseArgs, getOptions, clean, resetOptions } = require('./cleaner');
+const {
+  pushIfExists,
+  removeDirContents,
+  parseArgs,
+  getOptions,
+  clean,
+  resetOptions,
+  setPreviewPromptHandler
+} = require('./cleaner');
 
 (async () => {
   // Тест pushIfExists
@@ -125,7 +133,8 @@ const { pushIfExists, removeDirContents, parseArgs, getOptions, clean, resetOpti
     dryRun: true,
     maxAge: '2h',
     concurrency: 2,
-    logFile: './run.log'
+    logFile: './run.log',
+    preview: true
   }));
   assert.ok(parseArgs(['--config', mainPreset]), 'Комбінована конфігурація має застосовуватися без помилок');
   const optsFromPreset = getOptions();
@@ -151,6 +160,7 @@ const { pushIfExists, removeDirContents, parseArgs, getOptions, clean, resetOpti
     path.resolve(presetTmp, 'run.log'),
     'logFile має бути нормалізовано відносно конфігурації'
   );
+  assert.ok(optsFromPreset.interactivePreview, 'Режим preview має активуватися через конфігурацію');
   resetOptions();
   fs.rmSync(presetTmp, { recursive: true, force: true });
 
@@ -182,6 +192,32 @@ const { pushIfExists, removeDirContents, parseArgs, getOptions, clean, resetOpti
   const optsAfterBad = getOptions();
   assert.strictEqual(optsAfterBad.extraDirs.length, 0, 'Налаштування не мають змінюватися після помилки конфігурації');
   fs.rmSync(badConfig, { force: true });
+
+  // Тест режиму попереднього перегляду (відмова)
+  resetOptions();
+  const previewSkipDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-preview-skip-'));
+  const previewSkipFile = path.join(previewSkipDir, 'skip.txt');
+  fs.writeFileSync(previewSkipFile, 'skip');
+  setPreviewPromptHandler(() => false);
+  assert.ok(parseArgs(['--preview']), 'Режим preview має зчитуватися без помилок');
+  const skipMetrics = await clean({ targets: [previewSkipDir] });
+  assert.ok(fs.existsSync(previewSkipFile), 'Файл має залишитися після відмови від очищення');
+  assert.strictEqual(skipMetrics.files, 0, 'Метрики не мають враховувати видалень при відмові');
+  resetOptions();
+  fs.rmSync(previewSkipDir, { recursive: true, force: true });
+
+  // Тест режиму попереднього перегляду (підтвердження)
+  resetOptions();
+  const previewConfirmDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-preview-confirm-'));
+  const previewConfirmFile = path.join(previewConfirmDir, 'confirm.txt');
+  fs.writeFileSync(previewConfirmFile, 'confirm');
+  setPreviewPromptHandler(() => true);
+  assert.ok(parseArgs(['--preview']), 'Режим preview має успішно вмикатися');
+  const confirmMetrics = await clean({ targets: [previewConfirmDir] });
+  assert.ok(!fs.existsSync(previewConfirmFile), 'Файл має бути видалений після підтвердження');
+  assert.strictEqual(confirmMetrics.files, 1, 'Повинен бути видалений один файл');
+  resetOptions();
+  fs.rmSync(previewConfirmDir, { recursive: true, force: true });
 
   console.log('Усі тести пройшли');
 })();
