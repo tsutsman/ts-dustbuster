@@ -57,7 +57,8 @@ The `cleaner.js` script supports several command-line options:
 - `--concurrency <number>` — limit the amount of concurrent cleanup operations (values > 1 enable parallel mode automatically).
 - `--dir <шлях>` — додати власну директорію до списку для очистки (можна вказувати кілька разів).
 - `--dir <path>` — add a custom directory to the cleanup list (can be used multiple times).
-- `--config <файл>` — JSON-файл з полем `dirs`, що містить масив шляхів.
+- `--config <файл>` — файл налаштувань у форматі JSON або YAML з описом директорій, виключень та додаткових опцій.
+- `--preset <назва|шлях>` — застосувати попередньо підготовлений пресет (шукається у поточному каталозі, `./presets` або за повним шляхом).
 - `--config <file>` — JSON file with a `dirs` array of paths.
 - `--log <файл>` — зберігати інформацію про виконання у вказаний файл.
 - `--log <file>` — store execution information in the specified file.
@@ -68,7 +69,15 @@ The `cleaner.js` script supports several command-line options:
 - `--exclude <шлях>` — ігнорувати вказаний шлях та його вміст під час очищення.
 - `--exclude <path>` — skip the specified path (and its contents) during cleanup.
 
-Поле `--config` тепер може містити не лише список директорій, а й опції `exclude`, `maxAge`, `summary`, `parallel`, `dryRun`, `deep`, `logFile`, `concurrency`. Відносні шляхи всередині конфігурації інтерпретуються відносно каталогу цього файлу.
+Поле `--config` тепер може містити не лише список директорій, а й опції `exclude`, `maxAge`, `summary`, `parallel`, `dryRun`, `deep`, `logFile`, `concurrency`. Відносні шляхи всередині конфігурації інтерпретуються відносно каталогу цього файлу. Конфігурації можуть включати інші пресети через поле `presets`, яке приймає перелік назв або шляхів до додаткових JSON/YAML файлів. Будь-які помилки в структурі або значеннях конфігурацій відображаються як дружні повідомлення, а зміни не застосовуються до виправлення помилки.
+
+Прапорець `--preset` дозволяє комбінувати кілька пресетів безпосередньо з CLI, наприклад:
+
+```bash
+dustbuster --preset базовий --preset prod-extra
+```
+
+Послідовність пресетів має значення: останні перевизначають значення попередніх, а списки директорій та виключень об'єднуються.
 The `--config` option can now include not only `dirs`, but also `exclude`, `maxAge`, `summary`, `parallel`, `dryRun`, `deep`, `logFile`, `concurrency`. Relative paths in the configuration are resolved against the file location.
 
 Під час очищення збирається статистика: кількість видалених файлів, тек, пропущених елементів та звільнений простір. За прапорцем `--summary` ці дані виводяться наприкінці роботи.

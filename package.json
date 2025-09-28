@@ -1,11 +1,14 @@
 {
   "name": "ts-dustbuster",
   "version": "1.0.0",
-  "bin": { "dustbuster": "./cleaner.js" },
+  "bin": {
+    "dustbuster": "./cleaner.js"
+  },
   "scripts": {
     "start": "node cleaner.js",
     "test": "node test.js"
   },
-  "dependencies": {},
-  "devDependencies": {}
+  "dependencies": {
+    "yaml": "^2.8.1"
+  }
 }

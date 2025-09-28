@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
+const YAML = require('yaml');
 
 // мінімально сумісна версія Node.js
 // minimum supported Node.js version
@@ -138,28 +139,40 @@ function parseDuration(value) {
   return amount * multiplier;
 }
 
-function setMaxAge(value) {
+function originPrefix(origin) {
+  return origin ? `[${origin}] ` : '';
+}
+
+function setMaxAge(value, origin) {
+  if (value === null) {
+    maxAgeMs = null;
+    return true;
+  }
   const parsed = parseDuration(value);
   if (parsed === null || Number.isNaN(parsed)) {
-    console.error('Невірне значення для --max-age. Приклад: 12h або 30m.');
+    console.error(`${originPrefix(origin)}Невірне значення для max-age. Приклад: 12h або 30m.`);
     return false;
   }
   maxAgeMs = parsed;
   return true;
 }
 
-function setConcurrency(value) {
-  if (value === undefined || value === null) {
+function setConcurrency(value, origin) {
+  if (value === undefined) {
     return false;
+  }
+  if (value === null) {
+    concurrency = null;
+    return true;
   }
   const parsed = typeof value === 'number' ? value : parseInt(String(value), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    console.error('Невірне значення для --concurrency. Використайте додатне ціле число.');
+    console.error(`${originPrefix(origin)}Невірне значення для concurrency. Використайте додатне ціле число.`);
     return false;
   }
   const normalized = Math.floor(parsed);
   if (normalized !== parsed) {
-    console.error('Значення --concurrency має бути цілим числом.');
+    console.error(`${originPrefix(origin)}Значення concurrency має бути цілим числом.`);
     return false;
   }
   concurrency = normalized;
@@ -180,6 +193,347 @@ function addExclusion(dir, baseDir = process.cwd()) {
   const resolved = normalizePath(path.isAbsolute(dir) ? dir : path.join(baseDir, dir));
   if (!exclusions.includes(resolved)) {
     exclusions.push(resolved);
+  }
+}
+
+function createEmptyPresetData() {
+  return {
+    dirs: [],
+    exclude: [],
+    maxAge: undefined,
+    summary: undefined,
+    parallel: undefined,
+    dryRun: undefined,
+    deep: undefined,
+    logFile: undefined,
+    concurrency: undefined
+  };
+}
+
+function mergePresetData(base, addition) {
+  return {
+    dirs: [...base.dirs, ...addition.dirs],
+    exclude: [...base.exclude, ...addition.exclude],
+    maxAge: addition.maxAge !== undefined ? addition.maxAge : base.maxAge,
+    summary: addition.summary !== undefined ? addition.summary : base.summary,
+    parallel: addition.parallel !== undefined ? addition.parallel : base.parallel,
+    dryRun: addition.dryRun !== undefined ? addition.dryRun : base.dryRun,
+    deep: addition.deep !== undefined ? addition.deep : base.deep,
+    logFile: addition.logFile !== undefined ? addition.logFile : base.logFile,
+    concurrency: addition.concurrency !== undefined ? addition.concurrency : base.concurrency
+  };
+}
+
+function ensureArrayOfStrings(value, key, source) {
+  if (!Array.isArray(value)) {
+    throw new Error(`${originPrefix(source)}Поле ${key} має бути масивом рядків.`);
+  }
+  return value.map((item, idx) => {
+    if (typeof item !== 'string') {
+      throw new Error(`${originPrefix(source)}Елемент ${key}[${idx}] має бути рядком.`);
+    }
+    const trimmed = item.trim();
+    if (!trimmed) {
+      throw new Error(`${originPrefix(source)}Елемент ${key}[${idx}] не може бути порожнім рядком.`);
+    }
+    return trimmed;
+  });
+}
+
+function ensureOptionalBoolean(value, key, source) {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== 'boolean') {
+    throw new Error(`${originPrefix(source)}Поле ${key} має бути булевим значенням true/false.`);
+  }
+  return value;
+}
+
+function ensureOptionalLogFile(value, baseDir, source) {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${originPrefix(source)}Поле logFile має бути непорожнім рядком або null.`);
+  }
+  const trimmed = value.trim();
+  return normalizePath(path.isAbsolute(trimmed) ? trimmed : path.join(baseDir, trimmed));
+}
+
+function ensureOptionalMaxAge(value, source) {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    throw new Error(`${originPrefix(source)}Поле maxAge має бути числом годин або рядком (наприклад, 12h).`);
+  }
+  const parsed = parseDuration(value);
+  if (parsed === null || Number.isNaN(parsed)) {
+    throw new Error(`${originPrefix(source)}Поле maxAge має бути у форматі 30m, 12h, 5d або числом годин.`);
+  }
+  return parsed;
+}
+
+function ensureOptionalConcurrency(value, source) {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  const parsed = typeof value === 'number' ? value : parseInt(String(value), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${originPrefix(source)}Поле concurrency має бути додатним цілим числом.`);
+  }
+  if (!Number.isInteger(parsed)) {
+    throw new Error(`${originPrefix(source)}Поле concurrency має бути цілим числом.`);
+  }
+  return parsed;
+}
+
+const ALLOWED_CONFIG_KEYS = new Set([
+  'dirs',
+  'exclude',
+  'maxAge',
+  'summary',
+  'parallel',
+  'dryRun',
+  'deep',
+  'logFile',
+  'concurrency',
+  'presets'
+]);
+
+function extractConfig(config, baseDir, source) {
+  const result = createEmptyPresetData();
+
+  for (const key of Object.keys(config)) {
+    if (!ALLOWED_CONFIG_KEYS.has(key)) {
+      throw new Error(`${originPrefix(source)}Невідоме поле "${key}" у конфігурації.`);
+    }
+  }
+
+  if (config.dirs !== undefined) {
+    const dirs = ensureArrayOfStrings(config.dirs, 'dirs', source)
+      .map(entry => normalizePath(path.isAbsolute(entry) ? entry : path.join(baseDir, entry)));
+    result.dirs.push(...dirs);
+  }
+
+  if (config.exclude !== undefined) {
+    const exclude = ensureArrayOfStrings(config.exclude, 'exclude', source)
+      .map(entry => normalizePath(path.isAbsolute(entry) ? entry : path.join(baseDir, entry)));
+    result.exclude.push(...exclude);
+  }
+
+  result.maxAge = ensureOptionalMaxAge(config.maxAge, source);
+  result.summary = ensureOptionalBoolean(config.summary, source);
+  result.parallel = ensureOptionalBoolean(config.parallel, source);
+  result.dryRun = ensureOptionalBoolean(config.dryRun, source);
+  result.deep = ensureOptionalBoolean(config.deep, source);
+  result.logFile = ensureOptionalLogFile(config.logFile, baseDir, source);
+  result.concurrency = ensureOptionalConcurrency(config.concurrency, source);
+
+  return result;
+}
+
+function resolvePreset(reference, baseDir) {
+  if (typeof reference !== 'string' || !reference.trim()) {
+    throw new Error(`${originPrefix(baseDir)}Назва пресету має бути непорожнім рядком.`);
+  }
+
+  const trimmed = reference.trim();
+  const hasExt = path.extname(trimmed) !== '';
+  const hasSeparator = /[\\/]/.test(trimmed);
+  const baseSearchDirs = [];
+
+  const normalizedBase = baseDir || process.cwd();
+
+  if (path.isAbsolute(trimmed)) {
+    baseSearchDirs.push('');
+  } else {
+    baseSearchDirs.push(normalizedBase);
+    if (!hasSeparator) {
+      baseSearchDirs.push(path.join(normalizedBase, 'presets'));
+      baseSearchDirs.push(path.join(process.cwd(), 'presets'));
+      baseSearchDirs.push(path.join(__dirname, 'presets'));
+    }
+  }
+
+  const variants = [];
+  const appendVariants = target => {
+    if (hasExt) {
+      variants.push(target);
+    } else {
+      variants.push(target);
+      variants.push(`${target}.yaml`);
+      variants.push(`${target}.yml`);
+      variants.push(`${target}.json`);
+    }
+  };
+
+  if (path.isAbsolute(trimmed)) {
+    appendVariants(trimmed);
+  } else {
+    for (const dir of baseSearchDirs) {
+      if (!dir) {
+        appendVariants(trimmed);
+      } else {
+        appendVariants(path.join(dir, trimmed));
+      }
+    }
+  }
+
+  const checked = new Set();
+  for (const candidate of variants) {
+    const normalized = normalizePath(candidate);
+    if (checked.has(normalized)) {
+      continue;
+    }
+    checked.add(normalized);
+    if (fs.existsSync(normalized) && fs.statSync(normalized).isFile()) {
+      return normalized;
+    }
+  }
+
+  throw new Error(`${originPrefix(baseDir)}Не вдалося знайти пресет "${reference}".`);
+}
+
+function parseConfigFile(filePath, visited = new Set()) {
+  const normalized = normalizePath(filePath);
+  if (visited.has(normalized)) {
+    throw new Error(`${originPrefix(normalized)}Виявлено циклічне підключення пресетів.`);
+  }
+  visited.add(normalized);
+
+  let raw;
+  try {
+    raw = fs.readFileSync(normalized, 'utf8');
+  } catch (err) {
+    throw new Error(`${originPrefix(normalized)}Не вдалося прочитати файл: ${err.message}`);
+  }
+
+  const ext = path.extname(normalized).toLowerCase();
+  let parsed;
+  try {
+    if (ext === '.json') {
+      parsed = raw.trim() ? JSON.parse(raw) : {};
+    } else if (ext === '.yaml' || ext === '.yml') {
+      parsed = raw.trim() ? YAML.parse(raw) : {};
+    } else {
+      try {
+        parsed = raw.trim() ? JSON.parse(raw) : {};
+      } catch (jsonErr) {
+        try {
+          parsed = raw.trim() ? YAML.parse(raw) : {};
+        } catch (yamlErr) {
+          throw new Error(`${originPrefix(normalized)}Не вдалося розпарсити конфіг: ${yamlErr.message || jsonErr.message}`);
+        }
+      }
+    }
+  } catch (err) {
+    if (err instanceof Error) {
+      throw new Error(`${originPrefix(normalized)}Не вдалося розпарсити конфіг: ${err.message}`);
+    }
+    throw err;
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${originPrefix(normalized)}Конфігурація має бути об'єктом (мапою ключ-значення).`);
+  }
+
+  const baseDir = path.dirname(normalized);
+  let accumulated = createEmptyPresetData();
+
+  if (parsed.presets !== undefined) {
+    const presets = ensureArrayOfStrings(parsed.presets, 'presets', normalized);
+    for (const presetRef of presets) {
+      const presetPath = resolvePreset(presetRef, baseDir);
+      const nested = parseConfigFile(presetPath, visited);
+      accumulated = mergePresetData(accumulated, nested);
+    }
+  }
+
+  const { presets, ...rest } = parsed;
+  const current = extractConfig(rest, baseDir, normalized);
+  accumulated = mergePresetData(accumulated, current);
+
+  visited.delete(normalized);
+  return accumulated;
+}
+
+function applyConfigData(data, source) {
+  data.dirs.forEach(dir => addExtraDir(dir));
+  data.exclude.forEach(dir => addExclusion(dir));
+
+  if (data.maxAge !== undefined) {
+    maxAgeMs = data.maxAge;
+  }
+
+  if (data.concurrency !== undefined) {
+    if (data.concurrency === null) {
+      concurrency = null;
+    } else if (!setConcurrency(data.concurrency, source)) {
+      throw new Error(`${originPrefix(source)}Не вдалося застосувати concurrency.`);
+    }
+  }
+
+  if (data.summary !== undefined) {
+    summary = data.summary;
+  }
+  if (data.parallel !== undefined) {
+    parallel = data.parallel;
+  }
+  if (data.dryRun !== undefined) {
+    dryRun = data.dryRun;
+  }
+  if (data.deep !== undefined) {
+    deepClean = data.deep;
+  }
+  if (data.logFile !== undefined) {
+    logFile = data.logFile;
+  }
+}
+
+function applyConfigFromPath(resolvedPath) {
+  try {
+    const data = parseConfigFile(resolvedPath);
+    applyConfigData(data, resolvedPath);
+    return true;
+  } catch (err) {
+    if (err instanceof Error) {
+      console.error(err.message);
+      return false;
+    }
+    console.error(err);
+    return false;
+  }
+}
+
+function handleConfigArgument(configPath) {
+  const resolved = normalizePath(path.isAbsolute(configPath)
+    ? configPath
+    : path.join(process.cwd(), configPath));
+  return applyConfigFromPath(resolved);
+}
+
+function handlePresetArgument(presetRef) {
+  try {
+    const resolved = resolvePreset(presetRef, process.cwd());
+    return applyConfigFromPath(resolved);
+  } catch (err) {
+    if (err instanceof Error) {
+      console.error(err.message);
+      return false;
+    }
+    console.error(err);
+    return false;
   }
 }
 
@@ -239,6 +593,7 @@ function advancedWindowsClean() {
 }
 
 function parseArgs(args = process.argv.slice(2)) {
+  let ok = true;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === '--dry-run') {
@@ -247,60 +602,60 @@ function parseArgs(args = process.argv.slice(2)) {
       parallel = true;
     } else if (a === '--deep') {
       deepClean = true;
-    } else if (a === '--log' && args[i + 1]) {
-      logFile = args[++i];
-    } else if (a === '--dir' && args[i + 1]) {
-      addExtraDir(args[++i]);
-    } else if (a === '--exclude' && args[i + 1]) {
-      addExclusion(args[++i]);
+    } else if (a === '--log') {
+      if (!args[i + 1]) {
+        console.error('Прапорець --log вимагає шлях до файлу.');
+        ok = false;
+      } else {
+        logFile = args[++i];
+      }
+    } else if (a === '--dir') {
+      if (!args[i + 1]) {
+        console.error('Прапорець --dir вимагає шлях до директорії.');
+        ok = false;
+      } else {
+        addExtraDir(args[++i]);
+      }
+    } else if (a === '--exclude') {
+      if (!args[i + 1]) {
+        console.error('Прапорець --exclude вимагає шлях до директорії.');
+        ok = false;
+      } else {
+        addExclusion(args[++i]);
+      }
     } else if (a === '--summary') {
       summary = true;
-    } else if (a === '--max-age' && args[i + 1]) {
-      if (!setMaxAge(args[++i])) {
-        // повідомлення вже виведено всередині setMaxAge
+    } else if (a === '--max-age') {
+      if (!args[i + 1]) {
+        console.error('Прапорець --max-age вимагає значення тривалості.');
+        ok = false;
+      } else if (!setMaxAge(args[++i])) {
+        ok = false;
       }
-    } else if (a === '--concurrency' && args[i + 1]) {
-      if (!setConcurrency(args[++i])) {
-        // повідомлення вже виведено всередині setConcurrency
+    } else if (a === '--concurrency') {
+      if (!args[i + 1]) {
+        console.error('Прапорець --concurrency вимагає числове значення.');
+        ok = false;
+      } else if (!setConcurrency(args[++i])) {
+        ok = false;
       }
-    } else if (a === '--config' && args[i + 1]) {
-      const cfgPath = args[++i];
-      try {
-        const data = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-        if (Array.isArray(data.dirs)) {
-          data.dirs.forEach(dir => addExtraDir(dir, path.dirname(cfgPath)));
-        }
-        if (Array.isArray(data.exclude)) {
-          data.exclude.forEach(dir => addExclusion(dir, path.dirname(cfgPath)));
-        }
-        if (data.maxAge !== undefined) {
-          setMaxAge(data.maxAge);
-        }
-        if (typeof data.summary === 'boolean') {
-          summary = data.summary;
-        }
-        if (typeof data.parallel === 'boolean') {
-          parallel = data.parallel;
-        }
-        if (typeof data.dryRun === 'boolean') {
-          dryRun = data.dryRun;
-        }
-        if (typeof data.deep === 'boolean') {
-          deepClean = data.deep;
-        }
-        if (typeof data.logFile === 'string') {
-          logFile = path.isAbsolute(data.logFile)
-            ? data.logFile
-            : path.join(path.dirname(cfgPath), data.logFile);
-        }
-        if (data.concurrency !== undefined) {
-          setConcurrency(data.concurrency);
-        }
-      } catch (err) {
-        console.error(`Не вдалося прочитати конфіг ${cfgPath}:`, err.message);
+    } else if (a === '--config') {
+      if (!args[i + 1]) {
+        console.error('Прапорець --config вимагає шлях до файлу конфігурації.');
+        ok = false;
+      } else if (!handleConfigArgument(args[++i])) {
+        ok = false;
+      }
+    } else if (a === '--preset') {
+      if (!args[i + 1]) {
+        console.error('Прапорець --preset вимагає назву або шлях до пресету.');
+        ok = false;
+      } else if (!handlePresetArgument(args[++i])) {
+        ok = false;
       }
     }
   }
+  return ok;
 }
 
 function concurrencyLimit(taskCount) {
@@ -489,7 +844,7 @@ async function clean({ targets: targetOverride } = {}) {
   return total;
 }
 
-parseArgs();
+const parsedOk = parseArgs();
 
 if (parseInt(process.versions.node.split('.')[0], 10) < MIN_NODE_MAJOR) {
   console.error(`Потрібна Node.js >= ${MIN_NODE_MAJOR}. Поточна ${process.versions.node}`);
@@ -497,6 +852,9 @@ if (parseInt(process.versions.node.split('.')[0], 10) < MIN_NODE_MAJOR) {
 }
 
 if (require.main === module) {
+  if (!parsedOk) {
+    process.exit(1);
+  }
   clean().catch(err => {
     console.error('Помилка виконання скрипту:', err);
   });
