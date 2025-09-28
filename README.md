@@ -64,12 +64,14 @@ The `cleaner.js` script supports several command-line options:
 - `--log <file>` — store execution information in the specified file.
 - `--summary` — наприкінці показати підсумок із кількістю видалених файлів/тек та звільненим місцем.
 - `--summary` — print a summary with the number of removed files/folders and reclaimed space.
+- `--preview` — інтерактивно підтверджувати очищення кожного каталогу після попереднього перегляду.
+- `--preview` — interactively confirm cleanup of each directory after a preview.
 - `--max-age <тривалість>` — видаляти лише елементи, старші за задану тривалість (наприклад, `12h`, `30m`, `5d`; без суфікса — години).
 - `--max-age <duration>` — delete only items older than the given duration (for example `12h`, `30m`, `5d`; default unit is hours when no suffix is provided).
 - `--exclude <шлях>` — ігнорувати вказаний шлях та його вміст під час очищення.
 - `--exclude <path>` — skip the specified path (and its contents) during cleanup.
 
-Поле `--config` тепер може містити не лише список директорій, а й опції `exclude`, `maxAge`, `summary`, `parallel`, `dryRun`, `deep`, `logFile`, `concurrency`. Відносні шляхи всередині конфігурації інтерпретуються відносно каталогу цього файлу. Конфігурації можуть включати інші пресети через поле `presets`, яке приймає перелік назв або шляхів до додаткових JSON/YAML файлів. Будь-які помилки в структурі або значеннях конфігурацій відображаються як дружні повідомлення, а зміни не застосовуються до виправлення помилки.
+Поле `--config` тепер може містити не лише список директорій, а й опції `exclude`, `maxAge`, `summary`, `parallel`, `dryRun`, `deep`, `logFile`, `concurrency`, `preview`. Відносні шляхи всередині конфігурації інтерпретуються відносно каталогу цього файлу. Конфігурації можуть включати інші пресети через поле `presets`, яке приймає перелік назв або шляхів до додаткових JSON/YAML файлів. Будь-які помилки в структурі або значеннях конфігурацій відображаються як дружні повідомлення, а зміни не застосовуються до виправлення помилки.
 
 Прапорець `--preset` дозволяє комбінувати кілька пресетів безпосередньо з CLI, наприклад:
 

@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
+const readline = require('readline');
 const YAML = require('yaml');
 
 // мінімально сумісна версія Node.js
@@ -20,6 +21,9 @@ let summary = false;
 let maxAgeMs = null;
 const exclusions = [];
 let concurrency = null;
+let interactivePreview = false;
+let previewPromptHandler = null;
+let previewInterface = null;
 // additional directories to clean
 
 function log(msg) {
@@ -71,6 +75,88 @@ function mergeMetrics(target, addition) {
   target.skipped += addition.skipped;
   target.errors += addition.errors;
   return target;
+}
+
+function setPreviewPromptHandler(handler) {
+  previewPromptHandler = typeof handler === 'function' ? handler : null;
+}
+
+function closePreviewInterface() {
+  if (previewInterface) {
+    previewInterface.close();
+    previewInterface = null;
+  }
+}
+
+async function askForPreviewConfirmation(message) {
+  if (previewPromptHandler) {
+    return Boolean(await previewPromptHandler(message));
+  }
+
+  if (!process.stdin.isTTY) {
+    console.error('Режим попереднього перегляду недоступний у неінтерактивному середовищі. Каталог буде пропущено.');
+    return false;
+  }
+
+  if (!previewInterface) {
+    previewInterface = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+  }
+
+  return new Promise(resolve => {
+    previewInterface.question(message, answer => {
+      const normalized = answer.trim().toLowerCase();
+      const positive = normalized === 'y'
+        || normalized === 'yes'
+        || normalized === 'т'
+        || normalized === 'так'
+        || normalized === '1';
+      resolve(positive);
+    });
+  });
+}
+
+async function filterTargetsByPreview(targets) {
+  const confirmed = [];
+
+  try {
+    for (const dir of targets) {
+      let stat;
+      try {
+        stat = await fs.promises.lstat(dir);
+      } catch (err) {
+        console.error(`Не вдалося отримати інформацію про ${dir}:`, err.message);
+        continue;
+      }
+
+      let info;
+      try {
+        info = await inspectPath(dir, stat);
+      } catch (err) {
+        console.error(`Не вдалося зібрати дані для попереднього перегляду ${dir}:`, err.message);
+        continue;
+      }
+
+      log(`[preview] ${dir}`);
+      log(`[preview] Файлів: ${info.files}, тек: ${info.dirs}, оцінений розмір: ${formatBytes(info.bytes)}`);
+      if (dryRun) {
+        log('[preview] Активний режим dry-run: підтвердження не призведе до видалення.');
+      }
+
+      const confirm = await askForPreviewConfirmation('Очистити цей каталог? [y/N]: ');
+      if (confirm) {
+        confirmed.push(dir);
+      } else {
+        log(`[preview] Пропущено ${dir}`);
+      }
+    }
+  } finally {
+    closePreviewInterface();
+  }
+
+  return confirmed;
 }
 
 async function inspectPath(fullPath, stat) {
@@ -206,7 +292,8 @@ function createEmptyPresetData() {
     dryRun: undefined,
     deep: undefined,
     logFile: undefined,
-    concurrency: undefined
+    concurrency: undefined,
+    preview: undefined
   };
 }
 
@@ -220,7 +307,8 @@ function mergePresetData(base, addition) {
     dryRun: addition.dryRun !== undefined ? addition.dryRun : base.dryRun,
     deep: addition.deep !== undefined ? addition.deep : base.deep,
     logFile: addition.logFile !== undefined ? addition.logFile : base.logFile,
-    concurrency: addition.concurrency !== undefined ? addition.concurrency : base.concurrency
+    concurrency: addition.concurrency !== undefined ? addition.concurrency : base.concurrency,
+    preview: addition.preview !== undefined ? addition.preview : base.preview
   };
 }
 
@@ -308,6 +396,7 @@ const ALLOWED_CONFIG_KEYS = new Set([
   'deep',
   'logFile',
   'concurrency',
+  'preview',
   'presets'
 ]);
 
@@ -339,6 +428,7 @@ function extractConfig(config, baseDir, source) {
   result.deep = ensureOptionalBoolean(config.deep, source);
   result.logFile = ensureOptionalLogFile(config.logFile, baseDir, source);
   result.concurrency = ensureOptionalConcurrency(config.concurrency, source);
+  result.preview = ensureOptionalBoolean(config.preview, source);
 
   return result;
 }
@@ -499,6 +589,9 @@ function applyConfigData(data, source) {
   if (data.logFile !== undefined) {
     logFile = data.logFile;
   }
+  if (data.preview !== undefined) {
+    interactivePreview = data.preview;
+  }
 }
 
 function applyConfigFromPath(resolvedPath) {
@@ -625,6 +718,8 @@ function parseArgs(args = process.argv.slice(2)) {
       }
     } else if (a === '--summary') {
       summary = true;
+    } else if (a === '--preview') {
+      interactivePreview = true;
     } else if (a === '--max-age') {
       if (!args[i + 1]) {
         console.error('Прапорець --max-age вимагає значення тривалості.');
@@ -810,13 +905,29 @@ async function clean({ targets: targetOverride } = {}) {
     extraDirs.forEach(d => pushIfExists(targets, d));
   }
 
-  const filteredTargets = targets.filter(dir => {
+  let filteredTargets = targets.filter(dir => {
     if (isExcluded(dir)) {
       log(`[skip] Каталог пропущено за виключенням: ${dir}`);
       return false;
     }
     return true;
   });
+
+  if (interactivePreview && filteredTargets.length > 0) {
+    const confirmed = await filterTargetsByPreview(filteredTargets);
+    filteredTargets = confirmed;
+    if (filteredTargets.length === 0) {
+      log('Режим попереднього перегляду: жодного каталогу не підтверджено до очищення.');
+    }
+  }
+
+  if (filteredTargets.length === 0) {
+    const total = createMetrics();
+    if (summary) {
+      logSummary(total);
+    }
+    return total;
+  }
 
   const allMetrics = [];
   const taskFactories = filteredTargets.map(dir => () => removeDirContents(dir, createMetrics()));
@@ -870,7 +981,8 @@ function getOptions() {
     summary,
     maxAgeMs,
     exclusions: [...exclusions],
-    concurrency
+    concurrency,
+    interactivePreview
   };
 }
 
@@ -884,7 +996,19 @@ function resetOptions() {
   extraDirs.length = 0;
   exclusions.length = 0;
   concurrency = null;
+  interactivePreview = false;
+  previewPromptHandler = null;
+  closePreviewInterface();
 }
 
 // експортуємо clean для повторного використання у GUI
-module.exports = { pushIfExists, removeDirContents, parseArgs, advancedWindowsClean, getOptions, clean, resetOptions };
+module.exports = {
+  pushIfExists,
+  removeDirContents,
+  parseArgs,
+  advancedWindowsClean,
+  getOptions,
+  clean,
+  resetOptions,
+  setPreviewPromptHandler
+};
