@@ -43,6 +43,28 @@ const { pushIfExists, removeDirContents, parseArgs, getOptions, clean, resetOpti
   resetOptions();
   fs.rmSync(excludeDir, { recursive: true, force: true });
 
+  // Тест --concurrency
+  resetOptions();
+  parseArgs(['--concurrency', '3']);
+  const optsConcurrency = getOptions();
+  assert.strictEqual(optsConcurrency.concurrency, 3, 'concurrency має дорівнювати 3');
+  assert.ok(optsConcurrency.parallel, 'parallel має бути активованим при concurrency > 1');
+
+  resetOptions();
+  parseArgs(['--concurrency', '1']);
+  const optsConcurrencyOne = getOptions();
+  assert.strictEqual(optsConcurrencyOne.concurrency, 1, 'concurrency має дорівнювати 1');
+  assert.ok(!optsConcurrencyOne.parallel, 'parallel не має активуватися при concurrency = 1 без прапорця parallel');
+
+  resetOptions();
+  const cfgPath = path.join(os.tmpdir(), 'db-config.json');
+  fs.writeFileSync(cfgPath, JSON.stringify({ concurrency: 2 }));
+  parseArgs(['--config', cfgPath]);
+  const optsFromConfig = getOptions();
+  assert.strictEqual(optsFromConfig.concurrency, 2, 'concurrency має зчитуватися з конфігурації');
+  assert.ok(optsFromConfig.parallel, 'parallel має вмикатися, якщо concurrency > 1 у конфігурації');
+  fs.unlinkSync(cfgPath);
+
   // Тест clean у режимі dry-run
   resetOptions();
   const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'db-test-'));

@@ -53,6 +53,8 @@ The `cleaner.js` script supports several command-line options:
 - `--dry-run` — only show which files would be removed.
 - `--parallel` — виконувати очищення декількох директорій одночасно.
 - `--parallel` — clean several directories in parallel.
+- `--concurrency <число>` — обмежити кількість одночасних операцій очищення (значення > 1 автоматично вмикає паралельний режим).
+- `--concurrency <number>` — limit the amount of concurrent cleanup operations (values > 1 enable parallel mode automatically).
 - `--dir <шлях>` — додати власну директорію до списку для очистки (можна вказувати кілька разів).
 - `--dir <path>` — add a custom directory to the cleanup list (can be used multiple times).
 - `--config <файл>` — JSON-файл з полем `dirs`, що містить масив шляхів.
@@ -66,8 +68,8 @@ The `cleaner.js` script supports several command-line options:
 - `--exclude <шлях>` — ігнорувати вказаний шлях та його вміст під час очищення.
 - `--exclude <path>` — skip the specified path (and its contents) during cleanup.
 
-Поле `--config` тепер може містити не лише список директорій, а й опції `exclude`, `maxAge`, `summary`, `parallel`, `dryRun`, `deep`, `logFile`. Відносні шляхи всередині конфігурації інтерпретуються відносно каталогу цього файлу.
-The `--config` option can now include not only `dirs`, but also `exclude`, `maxAge`, `summary`, `parallel`, `dryRun`, `deep`, `logFile`. Relative paths in the configuration are resolved against the file location.
+Поле `--config` тепер може містити не лише список директорій, а й опції `exclude`, `maxAge`, `summary`, `parallel`, `dryRun`, `deep`, `logFile`, `concurrency`. Відносні шляхи всередині конфігурації інтерпретуються відносно каталогу цього файлу.
+The `--config` option can now include not only `dirs`, but also `exclude`, `maxAge`, `summary`, `parallel`, `dryRun`, `deep`, `logFile`, `concurrency`. Relative paths in the configuration are resolved against the file location.
 
 Під час очищення збирається статистика: кількість видалених файлів, тек, пропущених елементів та звільнений простір. За прапорцем `--summary` ці дані виводяться наприкінці роботи.
 During cleanup the tool gathers statistics: number of removed files, folders, skipped entries and reclaimed space. With the `--summary` flag this information is printed at the end of execution.

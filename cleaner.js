@@ -18,6 +18,7 @@ const extraDirs = [];
 let summary = false;
 let maxAgeMs = null;
 const exclusions = [];
+let concurrency = null;
 // additional directories to clean
 
 function log(msg) {
@@ -147,6 +148,27 @@ function setMaxAge(value) {
   return true;
 }
 
+function setConcurrency(value) {
+  if (value === undefined || value === null) {
+    return false;
+  }
+  const parsed = typeof value === 'number' ? value : parseInt(String(value), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    console.error('Невірне значення для --concurrency. Використайте додатне ціле число.');
+    return false;
+  }
+  const normalized = Math.floor(parsed);
+  if (normalized !== parsed) {
+    console.error('Значення --concurrency має бути цілим числом.');
+    return false;
+  }
+  concurrency = normalized;
+  if (normalized > 1) {
+    parallel = true;
+  }
+  return true;
+}
+
 function addExtraDir(dir, baseDir = process.cwd()) {
   const resolved = normalizePath(path.isAbsolute(dir) ? dir : path.join(baseDir, dir));
   if (!extraDirs.includes(resolved)) {
@@ -237,6 +259,10 @@ function parseArgs(args = process.argv.slice(2)) {
       if (!setMaxAge(args[++i])) {
         // повідомлення вже виведено всередині setMaxAge
       }
+    } else if (a === '--concurrency' && args[i + 1]) {
+      if (!setConcurrency(args[++i])) {
+        // повідомлення вже виведено всередині setConcurrency
+      }
     } else if (a === '--config' && args[i + 1]) {
       const cfgPath = args[++i];
       try {
@@ -267,11 +293,59 @@ function parseArgs(args = process.argv.slice(2)) {
             ? data.logFile
             : path.join(path.dirname(cfgPath), data.logFile);
         }
+        if (data.concurrency !== undefined) {
+          setConcurrency(data.concurrency);
+        }
       } catch (err) {
         console.error(`Не вдалося прочитати конфіг ${cfgPath}:`, err.message);
       }
     }
   }
+}
+
+function concurrencyLimit(taskCount) {
+  if (typeof concurrency === 'number' && concurrency > 0) {
+    return Math.min(concurrency, taskCount);
+  }
+  if (parallel) {
+    return taskCount;
+  }
+  return 1;
+}
+
+async function runWithLimit(tasks, limit) {
+  const results = [];
+  let index = 0;
+  const executing = new Set();
+
+  const scheduleNext = () => {
+    if (index >= tasks.length) {
+      return null;
+    }
+    const task = tasks[index++]();
+    const promise = task.then(result => {
+      executing.delete(promise);
+      return result;
+    }).catch(err => {
+      executing.delete(promise);
+      throw err;
+    });
+    executing.add(promise);
+    results.push(promise);
+    return promise;
+  };
+
+  while (executing.size < limit && index < tasks.length) {
+    scheduleNext();
+  }
+
+  while (index < tasks.length) {
+    await Promise.race(executing);
+    scheduleNext();
+  }
+
+  await Promise.all(executing);
+  return Promise.all(results);
 }
 
 async function removeDirContents(dir, metrics = createMetrics()) {
@@ -390,13 +464,16 @@ async function clean({ targets: targetOverride } = {}) {
   });
 
   const allMetrics = [];
-  const tasks = filteredTargets.map(dir => removeDirContents(dir, createMetrics()));
-  if (parallel) {
-    allMetrics.push(...await Promise.all(tasks));
-  } else {
-    for (const task of tasks) {
-      allMetrics.push(await task);
+  const taskFactories = filteredTargets.map(dir => () => removeDirContents(dir, createMetrics()));
+  const limit = concurrencyLimit(taskFactories.length);
+
+  if (limit <= 1) {
+    for (const task of taskFactories) {
+      allMetrics.push(await task());
     }
+  } else {
+    const results = await runWithLimit(taskFactories, limit);
+    allMetrics.push(...results);
   }
 
   const total = allMetrics.reduce((acc, item) => mergeMetrics(acc, item), createMetrics());
@@ -434,7 +511,8 @@ function getOptions() {
     extraDirs: [...extraDirs],
     summary,
     maxAgeMs,
-    exclusions: [...exclusions]
+    exclusions: [...exclusions],
+    concurrency
   };
 }
 
@@ -447,6 +525,7 @@ function resetOptions() {
   maxAgeMs = null;
   extraDirs.length = 0;
   exclusions.length = 0;
+  concurrency = null;
 }
 
 // експортуємо clean для повторного використання у GUI
