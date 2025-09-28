@@ -31,7 +31,10 @@ const { pushIfExists, removeDirContents, parseArgs, getOptions, clean, resetOpti
   // Тест parseArgs
   resetOptions();
   const excludeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-exclude-'));
-  parseArgs(['--dry-run', '--parallel', '--deep', '--summary', '--max-age', '2d', '--exclude', excludeDir, '--log', 'out.log']);
+  assert.ok(
+    parseArgs(['--dry-run', '--parallel', '--deep', '--summary', '--max-age', '2d', '--exclude', excludeDir, '--log', 'out.log']),
+    'Аргументи командного рядка мають оброблятися без помилок'
+  );
   const opts = getOptions();
   assert.ok(opts.dryRun, 'dry-run має бути увімкнено');
   assert.ok(opts.parallel, 'parallel має бути увімкнено');
@@ -45,13 +48,13 @@ const { pushIfExists, removeDirContents, parseArgs, getOptions, clean, resetOpti
 
   // Тест --concurrency
   resetOptions();
-  parseArgs(['--concurrency', '3']);
+  assert.ok(parseArgs(['--concurrency', '3']), 'concurrency=3 має зчитуватися без помилок');
   const optsConcurrency = getOptions();
   assert.strictEqual(optsConcurrency.concurrency, 3, 'concurrency має дорівнювати 3');
   assert.ok(optsConcurrency.parallel, 'parallel має бути активованим при concurrency > 1');
 
   resetOptions();
-  parseArgs(['--concurrency', '1']);
+  assert.ok(parseArgs(['--concurrency', '1']), 'concurrency=1 має зчитуватися без помилок');
   const optsConcurrencyOne = getOptions();
   assert.strictEqual(optsConcurrencyOne.concurrency, 1, 'concurrency має дорівнювати 1');
   assert.ok(!optsConcurrencyOne.parallel, 'parallel не має активуватися при concurrency = 1 без прапорця parallel');
@@ -59,7 +62,7 @@ const { pushIfExists, removeDirContents, parseArgs, getOptions, clean, resetOpti
   resetOptions();
   const cfgPath = path.join(os.tmpdir(), 'db-config.json');
   fs.writeFileSync(cfgPath, JSON.stringify({ concurrency: 2 }));
-  parseArgs(['--config', cfgPath]);
+  assert.ok(parseArgs(['--config', cfgPath]), 'JSON-конфігурація має застосовуватися без помилок');
   const optsFromConfig = getOptions();
   assert.strictEqual(optsFromConfig.concurrency, 2, 'concurrency має зчитуватися з конфігурації');
   assert.ok(optsFromConfig.parallel, 'parallel має вмикатися, якщо concurrency > 1 у конфігурації');
@@ -74,7 +77,7 @@ const { pushIfExists, removeDirContents, parseArgs, getOptions, clean, resetOpti
   fs.mkdirSync(nestedDir);
   const nestedFile = path.join(nestedDir, 'd.txt');
   fs.writeFileSync(nestedFile, 'd');
-  parseArgs(['--dry-run', '--summary']);
+  assert.ok(parseArgs(['--dry-run', '--summary']), 'Аргументи dry-run і summary мають зчитуватися без помилок');
   const dryMetrics = await clean({ targets: [tmp2] });
   assert.ok(fs.existsSync(tmpFile), 'Файл не повинен бути видалений у dry-run');
   assert.ok(fs.existsSync(nestedFile), 'Вкладений файл не повинен бути видалений у dry-run');
@@ -95,7 +98,7 @@ const { pushIfExists, removeDirContents, parseArgs, getOptions, clean, resetOpti
   fs.mkdirSync(protectedDir);
   const protectedFile = path.join(protectedDir, 'secret.txt');
   fs.writeFileSync(protectedFile, 'не чіпати');
-  parseArgs(['--max-age', '2d', '--exclude', protectedDir]);
+  assert.ok(parseArgs(['--max-age', '2d', '--exclude', protectedDir]), 'max-age та exclude мають застосовуватися без помилок');
   const resultMetrics = await clean({ targets: [tmp3] });
   assert.ok(!fs.existsSync(oldFile), 'Старий файл має бути видалений');
   assert.ok(fs.existsSync(newFile), 'Новий файл має бути збережений через max-age');
@@ -103,6 +106,82 @@ const { pushIfExists, removeDirContents, parseArgs, getOptions, clean, resetOpti
   assert.ok(resultMetrics.files >= 1, 'Повинен бути щонайменше один видалений файл');
   assert.ok(resultMetrics.skipped >= 2, 'Повинні бути пропуски через max-age та exclude');
   fs.rmSync(tmp3, { recursive: true, force: true });
+
+  // Тест YAML-конфігурації з пресетами
+  resetOptions();
+  const presetTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'db-preset-'));
+  const sharedPreset = path.join(presetTmp, 'shared.yaml');
+  fs.writeFileSync(sharedPreset, [
+    'dirs:',
+    '  - ./cache',
+    'exclude:',
+    '  - ./cache/tmp',
+    'summary: true'
+  ].join('\n'));
+  const mainPreset = path.join(presetTmp, 'main.json');
+  fs.writeFileSync(mainPreset, JSON.stringify({
+    presets: ['shared.yaml'],
+    dirs: ['./logs'],
+    dryRun: true,
+    maxAge: '2h',
+    concurrency: 2,
+    logFile: './run.log'
+  }));
+  assert.ok(parseArgs(['--config', mainPreset]), 'Комбінована конфігурація має застосовуватися без помилок');
+  const optsFromPreset = getOptions();
+  assert.ok(optsFromPreset.dryRun, 'dry-run з пресету має бути увімкнено');
+  assert.ok(optsFromPreset.summary, 'summary із вкладеного пресету має бути увімкнено');
+  assert.strictEqual(optsFromPreset.maxAgeMs, 2 * 60 * 60 * 1000, 'maxAge з YAML має бути сконвертовано у мілісекунди');
+  assert.strictEqual(optsFromPreset.concurrency, 2, 'concurrency має застосовуватися з конфігурації');
+  assert.ok(optsFromPreset.parallel, 'parallel має активуватися автоматично при concurrency > 1');
+  assert.ok(
+    optsFromPreset.extraDirs.includes(path.resolve(presetTmp, 'cache')),
+    'Директорія з вкладеного пресету має бути додана'
+  );
+  assert.ok(
+    optsFromPreset.extraDirs.includes(path.resolve(presetTmp, 'logs')),
+    'Додаткова директорія з основного пресету має бути додана'
+  );
+  assert.ok(
+    optsFromPreset.exclusions.includes(path.resolve(presetTmp, 'cache', 'tmp')),
+    'Виключення з пресету має бути застосоване'
+  );
+  assert.strictEqual(
+    optsFromPreset.logFile,
+    path.resolve(presetTmp, 'run.log'),
+    'logFile має бути нормалізовано відносно конфігурації'
+  );
+  resetOptions();
+  fs.rmSync(presetTmp, { recursive: true, force: true });
+
+  // Тест прапорця --preset з пошуком у каталозі presets
+  resetOptions();
+  const repoPresetDir = path.join(process.cwd(), 'presets');
+  fs.mkdirSync(repoPresetDir, { recursive: true });
+  const repoPresetFile = path.join(repoPresetDir, 'ci.yaml');
+  fs.writeFileSync(repoPresetFile, ['dryRun: true', 'parallel: true'].join('\n'));
+  assert.ok(parseArgs(['--preset', 'ci']), 'Пресет за назвою має бути знайдений у каталозі presets');
+  const optsFromNamedPreset = getOptions();
+  assert.ok(optsFromNamedPreset.dryRun, 'dryRun з пресету має бути увімкнено');
+  assert.ok(optsFromNamedPreset.parallel, 'parallel з пресету має бути увімкнено');
+  resetOptions();
+  fs.rmSync(repoPresetFile, { force: true });
+  try {
+    fs.rmdirSync(repoPresetDir);
+  } catch (err) {
+    if (err && err.code !== 'ENOTEMPTY' && err.code !== 'EBUSY') {
+      throw err;
+    }
+  }
+
+  // Тест валідації конфігурації
+  resetOptions();
+  const badConfig = path.join(os.tmpdir(), 'db-bad.yaml');
+  fs.writeFileSync(badConfig, 'dirs: 123\n');
+  assert.ok(!parseArgs(['--config', badConfig]), 'Помилкова конфігурація має сигналізувати про помилку');
+  const optsAfterBad = getOptions();
+  assert.strictEqual(optsAfterBad.extraDirs.length, 0, 'Налаштування не мають змінюватися після помилки конфігурації');
+  fs.rmSync(badConfig, { force: true });
 
   console.log('Усі тести пройшли');
 })();
