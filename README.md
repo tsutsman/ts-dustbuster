@@ -58,8 +58,10 @@ The `cleaner.js` script supports several command-line options:
 - `--dir <шлях>` — додати власну директорію до списку для очистки (можна вказувати кілька разів).
 - `--dir <path>` — add a custom directory to the cleanup list (can be used multiple times).
 - `--config <файл>` — файл налаштувань у форматі JSON або YAML з описом директорій, виключень та додаткових опцій.
+- `--config <каталог>` — застосувати всі файли конфігурацій (`*.json`, `*.yaml`, `*.yml`) з каталогу у алфавітному порядку як один пакет.
 - `--preset <назва|шлях>` — застосувати попередньо підготовлений пресет (шукається у поточному каталозі, `./presets` або за повним шляхом).
 - `--config <file>` — JSON file with a `dirs` array of paths.
+- `--config <directory>` — apply every JSON/YAML configuration inside the directory in alphabetical order as a single batch.
 - `--log <файл>` — зберігати інформацію про виконання у вказаний файл.
 - `--log <file>` — store execution information in the specified file.
 - `--summary` — наприкінці показати підсумок із кількістю видалених файлів/тек та звільненим місцем.

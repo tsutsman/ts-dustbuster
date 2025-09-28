@@ -184,6 +184,69 @@ const {
     }
   }
 
+  // Тест каталогу з кількома конфігураціями
+  resetOptions();
+  const bundleDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-bundle-'));
+  const baseConfig = path.join(bundleDir, '10-base.yaml');
+  fs.writeFileSync(baseConfig, [
+    'dryRun: true',
+    'summary: true',
+    'dirs:',
+    '  - ./cache'
+  ].join('\n'));
+  const overrideConfig = path.join(bundleDir, '20-override.json');
+  fs.writeFileSync(overrideConfig, JSON.stringify({
+    parallel: true,
+    dryRun: false,
+    dirs: ['./logs']
+  }));
+  fs.mkdirSync(path.join(bundleDir, 'cache'), { recursive: true });
+  fs.mkdirSync(path.join(bundleDir, 'logs'), { recursive: true });
+  assert.ok(parseArgs(['--config', bundleDir]), 'Каталог конфігурацій має застосовуватися як пакет');
+  const optsFromBundle = getOptions();
+  assert.ok(optsFromBundle.summary, 'summary має залишатися з базового конфігу');
+  assert.ok(optsFromBundle.parallel, 'parallel має застосовуватися з другого конфігу');
+  assert.ok(!optsFromBundle.dryRun, 'dryRun має бути перевизначено останнім файлом');
+  assert.ok(
+    optsFromBundle.extraDirs.includes(path.resolve(bundleDir, 'cache')),
+    'Директорія cache має бути додана з базового конфігу'
+  );
+  assert.ok(
+    optsFromBundle.extraDirs.includes(path.resolve(bundleDir, 'logs')),
+    'Директорія logs має бути додана з другого конфігу'
+  );
+  resetOptions();
+  fs.rmSync(bundleDir, { recursive: true, force: true });
+
+  // Тест помилки в одному з файлів каталогу
+  resetOptions();
+  const badBundleDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-bundle-bad-'));
+  const badBundleConfig = path.join(badBundleDir, '01-bad.yaml');
+  fs.writeFileSync(badBundleConfig, 'summary: "так"\n');
+  const goodBundleConfig = path.join(badBundleDir, '02-good.json');
+  fs.writeFileSync(goodBundleConfig, JSON.stringify({ dryRun: true }));
+  assert.ok(
+    !parseArgs(['--config', badBundleDir]),
+    'Помилки всередині каталогу мають зупиняти застосування всього пакету'
+  );
+  const optsAfterBadBundle = getOptions();
+  assert.ok(!optsAfterBadBundle.dryRun, 'Опції не мають змінюватися при помилці пакету');
+  resetOptions();
+  fs.rmSync(badBundleDir, { recursive: true, force: true });
+
+  // Тест каталогу без підтримуваних файлів
+  resetOptions();
+  const emptyBundleDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-bundle-empty-'));
+  fs.writeFileSync(path.join(emptyBundleDir, 'ignore.txt'), 'просто текст');
+  assert.ok(
+    !parseArgs(['--config', emptyBundleDir]),
+    'Каталог без JSON/YAML файлів має повертати помилку'
+  );
+  const optsAfterEmptyBundle = getOptions();
+  assert.strictEqual(optsAfterEmptyBundle.extraDirs.length, 0, 'Опції не мають змінюватися після порожнього каталогу');
+  resetOptions();
+  fs.rmSync(emptyBundleDir, { recursive: true, force: true });
+
   // Тест валідації конфігурації
   resetOptions();
   const badConfig = path.join(os.tmpdir(), 'db-bad.yaml');

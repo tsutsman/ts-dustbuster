@@ -386,6 +386,8 @@ function ensureOptionalConcurrency(value, source) {
   return parsed;
 }
 
+const CONFIG_EXTENSIONS = new Set(['.json', '.yaml', '.yml']);
+
 const ALLOWED_CONFIG_KEYS = new Set([
   'dirs',
   'exclude',
@@ -609,10 +611,98 @@ function applyConfigFromPath(resolvedPath) {
   }
 }
 
+function listConfigFilesInDirectory(directory) {
+  let entries;
+  try {
+    entries = fs.readdirSync(directory, { withFileTypes: true });
+  } catch (err) {
+    if (err instanceof Error) {
+      throw new Error(`${originPrefix(directory)}Не вдалося прочитати каталог конфігурацій: ${err.message}`);
+    }
+    throw err;
+  }
+
+  const files = entries
+    .filter(entry => entry.isFile() && CONFIG_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
+    .map(entry => normalizePath(path.join(directory, entry.name)))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+
+  return files;
+}
+
+function applyConfigFromDirectory(resolvedDir) {
+  let files;
+  try {
+    files = listConfigFilesInDirectory(resolvedDir);
+  } catch (err) {
+    if (err instanceof Error) {
+      console.error(err.message);
+      return false;
+    }
+    console.error(err);
+    return false;
+  }
+
+  if (!files.length) {
+    console.error(`${originPrefix(resolvedDir)}Каталог не містить конфігурацій з розширеннями .json, .yaml або .yml.`);
+    return false;
+  }
+
+  let accumulated = createEmptyPresetData();
+
+  for (const file of files) {
+    try {
+      const data = parseConfigFile(file);
+      accumulated = mergePresetData(accumulated, data);
+    } catch (err) {
+      if (err instanceof Error) {
+        console.error(err.message);
+        return false;
+      }
+      console.error(err);
+      return false;
+    }
+  }
+
+  try {
+    applyConfigData(accumulated, `${resolvedDir}${path.sep}*`);
+    return true;
+  } catch (err) {
+    if (err instanceof Error) {
+      console.error(err.message);
+      return false;
+    }
+    console.error(err);
+    return false;
+  }
+}
+
 function handleConfigArgument(configPath) {
   const resolved = normalizePath(path.isAbsolute(configPath)
     ? configPath
     : path.join(process.cwd(), configPath));
+
+  let stat;
+  try {
+    stat = fs.statSync(resolved);
+  } catch (err) {
+    if (err instanceof Error) {
+      console.error(`${originPrefix(resolved)}Не вдалося отримати дані про шлях: ${err.message}`);
+      return false;
+    }
+    console.error(err);
+    return false;
+  }
+
+  if (stat.isDirectory()) {
+    return applyConfigFromDirectory(resolved);
+  }
+
+  if (!stat.isFile()) {
+    console.error(`${originPrefix(resolved)}Шлях має бути файлом або каталогом з конфігураціями.`);
+    return false;
+  }
+
   return applyConfigFromPath(resolved);
 }
 
