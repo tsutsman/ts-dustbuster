@@ -54,6 +54,12 @@ const {
   resetOptions();
   fs.rmSync(excludeDir, { recursive: true, force: true });
 
+  // Тест --help
+  resetOptions();
+  assert.ok(parseArgs(['--help']), 'Прапорець --help має зчитуватися без помилок');
+  const optsHelp = getOptions();
+  assert.ok(optsHelp.helpRequested, 'Опція help має позначати необхідність показу довідки');
+
   // Тест --concurrency
   resetOptions();
   assert.ok(parseArgs(['--concurrency', '3']), 'concurrency=3 має зчитуватися без помилок');

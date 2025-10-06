@@ -24,6 +24,7 @@ let concurrency = null;
 let interactivePreview = false;
 let previewPromptHandler = null;
 let previewInterface = null;
+let helpRequested = false;
 // additional directories to clean
 
 function log(msg) {
@@ -727,6 +728,27 @@ function logSummary(total) {
   }
 }
 
+function printHelp() {
+  console.log([
+    'Використання: dustbuster [опції]',
+    '',
+    'Опції:',
+    '  -h, --help            Показати цю довідку.',
+    '  --dry-run             Лише показати дії без фактичного видалення.',
+    '  --parallel            Виконувати очищення паралельно.',
+    '  --concurrency N       Обмежити кількість паралельних завдань.',
+    '  --dir <шлях>          Додати додатковий каталог до списку.',
+    '  --exclude <шлях>      Виключити каталог з очищення.',
+    '  --config <шлях>       Застосувати конфігурацію (файл або каталог).',
+    '  --preset <назва>      Завантажити пресет за назвою або шляхом.',
+    '  --max-age <тривалість>Видаляти лише елементи старші за вказаний час.',
+    '  --summary             Показати підсумкову статистику.',
+    '  --preview             Інтерактивно підтверджувати очищення.',
+    '  --log <файл>          Зберігати журнал виконання у файл.',
+    '  --deep                Запускати додаткове очищення (Windows).'
+  ].join('\n'));
+}
+
 function pushIfExists(list, dir) {
   const resolved = normalizePath(dir);
   if (fs.existsSync(resolved)) {
@@ -785,6 +807,8 @@ function parseArgs(args = process.argv.slice(2)) {
       parallel = true;
     } else if (a === '--deep') {
       deepClean = true;
+    } else if (a === '--help' || a === '-h') {
+      helpRequested = true;
     } else if (a === '--log') {
       if (!args[i + 1]) {
         console.error('Прапорець --log вимагає шлях до файлу.');
@@ -1053,6 +1077,10 @@ if (parseInt(process.versions.node.split('.')[0], 10) < MIN_NODE_MAJOR) {
 }
 
 if (require.main === module) {
+  if (helpRequested) {
+    printHelp();
+    process.exit(parsedOk ? 0 : 1);
+  }
   if (!parsedOk) {
     process.exit(1);
   }
@@ -1072,7 +1100,8 @@ function getOptions() {
     maxAgeMs,
     exclusions: [...exclusions],
     concurrency,
-    interactivePreview
+    interactivePreview,
+    helpRequested
   };
 }
 
@@ -1089,6 +1118,7 @@ function resetOptions() {
   interactivePreview = false;
   previewPromptHandler = null;
   closePreviewInterface();
+  helpRequested = false;
 }
 
 // експортуємо clean для повторного використання у GUI
