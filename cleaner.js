@@ -48,7 +48,7 @@ function isExcluded(target) {
     return false;
   }
   const resolved = normalizePath(target);
-  return exclusions.some(ex => isWithin(ex, resolved));
+  return exclusions.some((ex) => isWithin(ex, resolved));
 }
 
 function formatBytes(bytes) {
@@ -95,7 +95,9 @@ async function askForPreviewConfirmation(message) {
   }
 
   if (!process.stdin.isTTY) {
-    console.error('Режим попереднього перегляду недоступний у неінтерактивному середовищі. Каталог буде пропущено.');
+    console.error(
+      'Режим попереднього перегляду недоступний у неінтерактивному середовищі. Каталог буде пропущено.'
+    );
     return false;
   }
 
@@ -106,14 +108,15 @@ async function askForPreviewConfirmation(message) {
     });
   }
 
-  return new Promise(resolve => {
-    previewInterface.question(message, answer => {
+  return new Promise((resolve) => {
+    previewInterface.question(message, (answer) => {
       const normalized = answer.trim().toLowerCase();
-      const positive = normalized === 'y'
-        || normalized === 'yes'
-        || normalized === 'т'
-        || normalized === 'так'
-        || normalized === '1';
+      const positive =
+        normalized === 'y' ||
+        normalized === 'yes' ||
+        normalized === 'т' ||
+        normalized === 'так' ||
+        normalized === '1';
       resolve(positive);
     });
   });
@@ -141,7 +144,9 @@ async function filterTargetsByPreview(targets) {
       }
 
       log(`[preview] ${dir}`);
-      log(`[preview] Файлів: ${info.files}, тек: ${info.dirs}, оцінений розмір: ${formatBytes(info.bytes)}`);
+      log(
+        `[preview] Файлів: ${info.files}, тек: ${info.dirs}, оцінений розмір: ${formatBytes(info.bytes)}`
+      );
       if (dryRun) {
         log('[preview] Активний режим dry-run: підтвердження не призведе до видалення.');
       }
@@ -162,7 +167,7 @@ async function filterTargetsByPreview(targets) {
 
 async function inspectPath(fullPath, stat) {
   let info = { files: 0, dirs: 0, bytes: 0 };
-  const currentStat = stat || await fs.promises.lstat(fullPath);
+  const currentStat = stat || (await fs.promises.lstat(fullPath));
   if (currentStat.isDirectory() && !currentStat.isSymbolicLink()) {
     info.dirs += 1;
     try {
@@ -254,7 +259,9 @@ function setConcurrency(value, origin) {
   }
   const parsed = typeof value === 'number' ? value : parseInt(String(value), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    console.error(`${originPrefix(origin)}Невірне значення для concurrency. Використайте додатне ціле число.`);
+    console.error(
+      `${originPrefix(origin)}Невірне значення для concurrency. Використайте додатне ціле число.`
+    );
     return false;
   }
   const normalized = Math.floor(parsed);
@@ -323,7 +330,9 @@ function ensureArrayOfStrings(value, key, source) {
     }
     const trimmed = item.trim();
     if (!trimmed) {
-      throw new Error(`${originPrefix(source)}Елемент ${key}[${idx}] не може бути порожнім рядком.`);
+      throw new Error(
+        `${originPrefix(source)}Елемент ${key}[${idx}] не може бути порожнім рядком.`
+      );
     }
     return trimmed;
   });
@@ -361,11 +370,15 @@ function ensureOptionalMaxAge(value, source) {
     return null;
   }
   if (typeof value !== 'string' && typeof value !== 'number') {
-    throw new Error(`${originPrefix(source)}Поле maxAge має бути числом годин або рядком (наприклад, 12h).`);
+    throw new Error(
+      `${originPrefix(source)}Поле maxAge має бути числом годин або рядком (наприклад, 12h).`
+    );
   }
   const parsed = parseDuration(value);
   if (parsed === null || Number.isNaN(parsed)) {
-    throw new Error(`${originPrefix(source)}Поле maxAge має бути у форматі 30m, 12h, 5d або числом годин.`);
+    throw new Error(
+      `${originPrefix(source)}Поле maxAge має бути у форматі 30m, 12h, 5d або числом годин.`
+    );
   }
   return parsed;
 }
@@ -413,14 +426,16 @@ function extractConfig(config, baseDir, source) {
   }
 
   if (config.dirs !== undefined) {
-    const dirs = ensureArrayOfStrings(config.dirs, 'dirs', source)
-      .map(entry => normalizePath(path.isAbsolute(entry) ? entry : path.join(baseDir, entry)));
+    const dirs = ensureArrayOfStrings(config.dirs, 'dirs', source).map((entry) =>
+      normalizePath(path.isAbsolute(entry) ? entry : path.join(baseDir, entry))
+    );
     result.dirs.push(...dirs);
   }
 
   if (config.exclude !== undefined) {
-    const exclude = ensureArrayOfStrings(config.exclude, 'exclude', source)
-      .map(entry => normalizePath(path.isAbsolute(entry) ? entry : path.join(baseDir, entry)));
+    const exclude = ensureArrayOfStrings(config.exclude, 'exclude', source).map((entry) =>
+      normalizePath(path.isAbsolute(entry) ? entry : path.join(baseDir, entry))
+    );
     result.exclude.push(...exclude);
   }
 
@@ -460,7 +475,7 @@ function resolvePreset(reference, baseDir) {
   }
 
   const variants = [];
-  const appendVariants = target => {
+  const appendVariants = (target) => {
     if (hasExt) {
       variants.push(target);
     } else {
@@ -526,7 +541,9 @@ function parseConfigFile(filePath, visited = new Set()) {
         try {
           parsed = raw.trim() ? YAML.parse(raw) : {};
         } catch (yamlErr) {
-          throw new Error(`${originPrefix(normalized)}Не вдалося розпарсити конфіг: ${yamlErr.message || jsonErr.message}`);
+          throw new Error(
+            `${originPrefix(normalized)}Не вдалося розпарсити конфіг: ${yamlErr.message || jsonErr.message}`
+          );
         }
       }
     }
@@ -538,7 +555,9 @@ function parseConfigFile(filePath, visited = new Set()) {
   }
 
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(`${originPrefix(normalized)}Конфігурація має бути об'єктом (мапою ключ-значення).`);
+    throw new Error(
+      `${originPrefix(normalized)}Конфігурація має бути об'єктом (мапою ключ-значення).`
+    );
   }
 
   const baseDir = path.dirname(normalized);
@@ -553,7 +572,8 @@ function parseConfigFile(filePath, visited = new Set()) {
     }
   }
 
-  const { presets, ...rest } = parsed;
+  const rest = { ...parsed };
+  delete rest.presets;
   const current = extractConfig(rest, baseDir, normalized);
   accumulated = mergePresetData(accumulated, current);
 
@@ -562,8 +582,8 @@ function parseConfigFile(filePath, visited = new Set()) {
 }
 
 function applyConfigData(data, source) {
-  data.dirs.forEach(dir => addExtraDir(dir));
-  data.exclude.forEach(dir => addExclusion(dir));
+  data.dirs.forEach((dir) => addExtraDir(dir));
+  data.exclude.forEach((dir) => addExclusion(dir));
 
   if (data.maxAge !== undefined) {
     maxAgeMs = data.maxAge;
@@ -618,14 +638,18 @@ function listConfigFilesInDirectory(directory) {
     entries = fs.readdirSync(directory, { withFileTypes: true });
   } catch (err) {
     if (err instanceof Error) {
-      throw new Error(`${originPrefix(directory)}Не вдалося прочитати каталог конфігурацій: ${err.message}`);
+      throw new Error(
+        `${originPrefix(directory)}Не вдалося прочитати каталог конфігурацій: ${err.message}`
+      );
     }
     throw err;
   }
 
   const files = entries
-    .filter(entry => entry.isFile() && CONFIG_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
-    .map(entry => normalizePath(path.join(directory, entry.name)))
+    .filter(
+      (entry) => entry.isFile() && CONFIG_EXTENSIONS.has(path.extname(entry.name).toLowerCase())
+    )
+    .map((entry) => normalizePath(path.join(directory, entry.name)))
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 
   return files;
@@ -645,7 +669,9 @@ function applyConfigFromDirectory(resolvedDir) {
   }
 
   if (!files.length) {
-    console.error(`${originPrefix(resolvedDir)}Каталог не містить конфігурацій з розширеннями .json, .yaml або .yml.`);
+    console.error(
+      `${originPrefix(resolvedDir)}Каталог не містить конфігурацій з розширеннями .json, .yaml або .yml.`
+    );
     return false;
   }
 
@@ -679,9 +705,9 @@ function applyConfigFromDirectory(resolvedDir) {
 }
 
 function handleConfigArgument(configPath) {
-  const resolved = normalizePath(path.isAbsolute(configPath)
-    ? configPath
-    : path.join(process.cwd(), configPath));
+  const resolved = normalizePath(
+    path.isAbsolute(configPath) ? configPath : path.join(process.cwd(), configPath)
+  );
 
   let stat;
   try {
@@ -722,31 +748,35 @@ function handlePresetArgument(presetRef) {
 }
 
 function logSummary(total) {
-  log(`Підсумок: файлів ${total.files}, тек ${total.dirs}, пропущено ${total.skipped}, помилок ${total.errors}, звільнено ${formatBytes(total.bytes)}.`);
+  log(
+    `Підсумок: файлів ${total.files}, тек ${total.dirs}, пропущено ${total.skipped}, помилок ${total.errors}, звільнено ${formatBytes(total.bytes)}.`
+  );
   if (dryRun) {
     log('Режим dry-run: показані значення відображають потенційно звільнений простір.');
   }
 }
 
 function printHelp() {
-  console.log([
-    'Використання: dustbuster [опції]',
-    '',
-    'Опції:',
-    '  -h, --help            Показати цю довідку.',
-    '  --dry-run             Лише показати дії без фактичного видалення.',
-    '  --parallel            Виконувати очищення паралельно.',
-    '  --concurrency N       Обмежити кількість паралельних завдань.',
-    '  --dir <шлях>          Додати додатковий каталог до списку.',
-    '  --exclude <шлях>      Виключити каталог з очищення.',
-    '  --config <шлях>       Застосувати конфігурацію (файл або каталог).',
-    '  --preset <назва>      Завантажити пресет за назвою або шляхом.',
-    '  --max-age <тривалість>Видаляти лише елементи старші за вказаний час.',
-    '  --summary             Показати підсумкову статистику.',
-    '  --preview             Інтерактивно підтверджувати очищення.',
-    '  --log <файл>          Зберігати журнал виконання у файл.',
-    '  --deep                Запускати додаткове очищення (Windows).'
-  ].join('\n'));
+  console.log(
+    [
+      'Використання: dustbuster [опції]',
+      '',
+      'Опції:',
+      '  -h, --help            Показати цю довідку.',
+      '  --dry-run             Лише показати дії без фактичного видалення.',
+      '  --parallel            Виконувати очищення паралельно.',
+      '  --concurrency N       Обмежити кількість паралельних завдань.',
+      '  --dir <шлях>          Додати додатковий каталог до списку.',
+      '  --exclude <шлях>      Виключити каталог з очищення.',
+      '  --config <шлях>       Застосувати конфігурацію (файл або каталог).',
+      '  --preset <назва>      Завантажити пресет за назвою або шляхом.',
+      '  --max-age <тривалість>Видаляти лише елементи старші за вказаний час.',
+      '  --summary             Показати підсумкову статистику.',
+      '  --preview             Інтерактивно підтверджувати очищення.',
+      '  --log <файл>          Зберігати журнал виконання у файл.',
+      '  --deep                Запускати додаткове очищення (Windows).'
+    ].join('\n')
+  );
 }
 
 function pushIfExists(list, dir) {
@@ -771,7 +801,9 @@ function advancedWindowsClean() {
     return;
   }
   try {
-    execSync('PowerShell -NoLogo -NoProfile -Command "Clear-RecycleBin -Force"', { stdio: 'inherit' });
+    execSync('PowerShell -NoLogo -NoProfile -Command "Clear-RecycleBin -Force"', {
+      stdio: 'inherit'
+    });
   } catch {}
   try {
     execSync('dism /online /Cleanup-Image /StartComponentCleanup /ResetBase', { stdio: 'inherit' });
@@ -780,18 +812,22 @@ function advancedWindowsClean() {
     execSync('RunDll32.exe InetCpl.cpl,ClearMyTracksByProcess 8', { stdio: 'inherit' });
   } catch {}
   try {
-    const logs = execSync('wevtutil.exe el', { encoding: 'utf8' })
-      .trim().split(/\r?\n/);
-    logs.forEach(log => {
+    const logs = execSync('wevtutil.exe el', { encoding: 'utf8' }).trim().split(/\r?\n/);
+    logs.forEach((log) => {
       if (log) {
-        try { execSync(`wevtutil.exe cl "${log}"`); } catch {}
+        try {
+          execSync(`wevtutil.exe cl "${log}"`);
+        } catch {}
       }
     });
   } catch {}
   try {
     execSync('net stop wuauserv', { stdio: 'inherit' });
     execSync('net stop bits', { stdio: 'inherit' });
-    fs.rmSync(path.join(process.env.WINDIR || 'C:/Windows', 'SoftwareDistribution'), { recursive: true, force: true });
+    fs.rmSync(path.join(process.env.WINDIR || 'C:/Windows', 'SoftwareDistribution'), {
+      recursive: true,
+      force: true
+    });
     execSync('net start wuauserv', { stdio: 'inherit' });
     execSync('net start bits', { stdio: 'inherit' });
   } catch {}
@@ -887,13 +923,15 @@ async function runWithLimit(tasks, limit) {
       return null;
     }
     const task = tasks[index++]();
-    const promise = task.then(result => {
-      executing.delete(promise);
-      return result;
-    }).catch(err => {
-      executing.delete(promise);
-      throw err;
-    });
+    const promise = task
+      .then((result) => {
+        executing.delete(promise);
+        return result;
+      })
+      .catch((err) => {
+        executing.delete(promise);
+        throw err;
+      });
     executing.add(promise);
     results.push(promise);
     return promise;
@@ -973,7 +1011,7 @@ async function removeDirContents(dir, metrics = createMetrics()) {
 async function clean({ targets: targetOverride } = {}) {
   const targets = [];
   if (Array.isArray(targetOverride) && targetOverride.length > 0) {
-    targetOverride.forEach(dir => pushIfExists(targets, dir));
+    targetOverride.forEach((dir) => pushIfExists(targets, dir));
   } else {
     pushIfExists(targets, os.tmpdir());
     if (process.platform === 'win32') {
@@ -988,9 +1026,18 @@ async function clean({ targets: targetOverride } = {}) {
       const recycle = path.join(process.env.SystemDrive || 'C:', '$Recycle.Bin');
       pushIfExists(targets, recycle);
       if (process.env.LOCALAPPDATA) {
-        pushIfExists(targets, path.join(process.env.LOCALAPPDATA, 'Microsoft', 'Windows', 'INetCache'));
-        pushIfExists(targets, path.join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'User Data', 'Default', 'Cache'));
-        pushIfExists(targets, path.join(process.env.LOCALAPPDATA, 'Microsoft', 'Edge', 'User Data', 'Default', 'Cache'));
+        pushIfExists(
+          targets,
+          path.join(process.env.LOCALAPPDATA, 'Microsoft', 'Windows', 'INetCache')
+        );
+        pushIfExists(
+          targets,
+          path.join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'User Data', 'Default', 'Cache')
+        );
+        pushIfExists(
+          targets,
+          path.join(process.env.LOCALAPPDATA, 'Microsoft', 'Edge', 'User Data', 'Default', 'Cache')
+        );
         pushIfExists(targets, path.join(process.env.LOCALAPPDATA, 'CrashDumps'));
       }
       if (process.env.APPDATA) {
@@ -1000,9 +1047,33 @@ async function clean({ targets: targetOverride } = {}) {
       pushIfExists(targets, '/var/tmp');
       pushIfExists(targets, path.join(os.homedir(), 'Library', 'Caches'));
       pushIfExists(targets, path.join(os.homedir(), 'Library', 'Logs'));
-      pushIfExists(targets, path.join(os.homedir(), 'Library', 'Application Support', 'Google', 'Chrome', 'Default', 'Cache'));
-      pushIfExists(targets, path.join(os.homedir(), 'Library', 'Application Support', 'Code', 'Cache'));
-      pushIfExists(targets, path.join(os.homedir(), 'Library', 'Application Support', 'Microsoft Edge', 'Default', 'Cache'));
+      pushIfExists(
+        targets,
+        path.join(
+          os.homedir(),
+          'Library',
+          'Application Support',
+          'Google',
+          'Chrome',
+          'Default',
+          'Cache'
+        )
+      );
+      pushIfExists(
+        targets,
+        path.join(os.homedir(), 'Library', 'Application Support', 'Code', 'Cache')
+      );
+      pushIfExists(
+        targets,
+        path.join(
+          os.homedir(),
+          'Library',
+          'Application Support',
+          'Microsoft Edge',
+          'Default',
+          'Cache'
+        )
+      );
     } else {
       pushIfExists(targets, '/var/tmp');
       pushIfExists(targets, '/var/cache/apt/archives');
@@ -1016,10 +1087,10 @@ async function clean({ targets: targetOverride } = {}) {
       pushIfExists(targets, path.join(os.homedir(), '.cache', 'chromium'));
       pushIfExists(targets, path.join(os.homedir(), '.cache', 'Code', 'Cache'));
     }
-    extraDirs.forEach(d => pushIfExists(targets, d));
+    extraDirs.forEach((d) => pushIfExists(targets, d));
   }
 
-  let filteredTargets = targets.filter(dir => {
+  let filteredTargets = targets.filter((dir) => {
     if (isExcluded(dir)) {
       log(`[skip] Каталог пропущено за виключенням: ${dir}`);
       return false;
@@ -1044,7 +1115,7 @@ async function clean({ targets: targetOverride } = {}) {
   }
 
   const allMetrics = [];
-  const taskFactories = filteredTargets.map(dir => () => removeDirContents(dir, createMetrics()));
+  const taskFactories = filteredTargets.map((dir) => () => removeDirContents(dir, createMetrics()));
   const limit = concurrencyLimit(taskFactories.length);
 
   if (limit <= 1) {
@@ -1084,7 +1155,7 @@ if (require.main === module) {
   if (!parsedOk) {
     process.exit(1);
   }
-  clean().catch(err => {
+  clean().catch((err) => {
     console.error('Помилка виконання скрипту:', err);
   });
 }
