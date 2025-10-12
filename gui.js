@@ -11,7 +11,10 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/clean') {
     const logs = [];
     const origLog = console.log;
-    console.log = msg => { logs.push(msg); origLog(msg); };
+    console.log = (msg) => {
+      logs.push(msg);
+      origLog(msg);
+    };
     await clean();
     console.log = origLog;
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });

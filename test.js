@@ -32,7 +32,11 @@ const {
   const metricsAfterRemove = await removeDirContents(tmp);
   const entries = fs.readdirSync(tmp);
   assert.strictEqual(entries.length, 0, 'Каталог має бути порожнім');
-  assert.strictEqual(metricsAfterRemove.files, 2, 'Має бути видалено два файли (включно з вкладеними)');
+  assert.strictEqual(
+    metricsAfterRemove.files,
+    2,
+    'Має бути видалено два файли (включно з вкладеними)'
+  );
   assert.strictEqual(metricsAfterRemove.dirs, 1, 'Має бути видалено одну піддиректорію');
   fs.rmdirSync(tmp);
 
@@ -40,7 +44,18 @@ const {
   resetOptions();
   const excludeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-exclude-'));
   assert.ok(
-    parseArgs(['--dry-run', '--parallel', '--deep', '--summary', '--max-age', '2d', '--exclude', excludeDir, '--log', 'out.log']),
+    parseArgs([
+      '--dry-run',
+      '--parallel',
+      '--deep',
+      '--summary',
+      '--max-age',
+      '2d',
+      '--exclude',
+      excludeDir,
+      '--log',
+      'out.log'
+    ]),
     'Аргументи командного рядка мають оброблятися без помилок'
   );
   const opts = getOptions();
@@ -49,7 +64,10 @@ const {
   assert.ok(opts.deepClean, 'deep має бути увімкнено');
   assert.ok(opts.summary, 'summary має бути увімкнено');
   assert.strictEqual(opts.maxAgeMs, 2 * 24 * 60 * 60 * 1000, 'maxAge має відповідати 2 дням');
-  assert.ok(opts.exclusions.includes(path.resolve(excludeDir)), 'Шлях має бути у переліку виключень');
+  assert.ok(
+    opts.exclusions.includes(path.resolve(excludeDir)),
+    'Шлях має бути у переліку виключень'
+  );
   assert.strictEqual(opts.logFile, 'out.log', 'Шлях до лог-файлу зберігається як передано');
   resetOptions();
   fs.rmSync(excludeDir, { recursive: true, force: true });
@@ -71,7 +89,10 @@ const {
   assert.ok(parseArgs(['--concurrency', '1']), 'concurrency=1 має зчитуватися без помилок');
   const optsConcurrencyOne = getOptions();
   assert.strictEqual(optsConcurrencyOne.concurrency, 1, 'concurrency має дорівнювати 1');
-  assert.ok(!optsConcurrencyOne.parallel, 'parallel не має активуватися при concurrency = 1 без прапорця parallel');
+  assert.ok(
+    !optsConcurrencyOne.parallel,
+    'parallel не має активуватися при concurrency = 1 без прапорця parallel'
+  );
 
   resetOptions();
   const cfgPath = path.join(os.tmpdir(), 'db-config.json');
@@ -91,7 +112,10 @@ const {
   fs.mkdirSync(nestedDir);
   const nestedFile = path.join(nestedDir, 'd.txt');
   fs.writeFileSync(nestedFile, 'd');
-  assert.ok(parseArgs(['--dry-run', '--summary']), 'Аргументи dry-run і summary мають зчитуватися без помилок');
+  assert.ok(
+    parseArgs(['--dry-run', '--summary']),
+    'Аргументи dry-run і summary мають зчитуватися без помилок'
+  );
   const dryMetrics = await clean({ targets: [tmp2] });
   assert.ok(fs.existsSync(tmpFile), 'Файл не повинен бути видалений у dry-run');
   assert.ok(fs.existsSync(nestedFile), 'Вкладений файл не повинен бути видалений у dry-run');
@@ -112,7 +136,10 @@ const {
   fs.mkdirSync(protectedDir);
   const protectedFile = path.join(protectedDir, 'secret.txt');
   fs.writeFileSync(protectedFile, 'не чіпати');
-  assert.ok(parseArgs(['--max-age', '2d', '--exclude', protectedDir]), 'max-age та exclude мають застосовуватися без помилок');
+  assert.ok(
+    parseArgs(['--max-age', '2d', '--exclude', protectedDir]),
+    'max-age та exclude мають застосовуватися без помилок'
+  );
   const resultMetrics = await clean({ targets: [tmp3] });
   assert.ok(!fs.existsSync(oldFile), 'Старий файл має бути видалений');
   assert.ok(fs.existsSync(newFile), 'Новий файл має бути збережений через max-age');
@@ -125,29 +152,40 @@ const {
   resetOptions();
   const presetTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'db-preset-'));
   const sharedPreset = path.join(presetTmp, 'shared.yaml');
-  fs.writeFileSync(sharedPreset, [
-    'dirs:',
-    '  - ./cache',
-    'exclude:',
-    '  - ./cache/tmp',
-    'summary: true'
-  ].join('\n'));
+  fs.writeFileSync(
+    sharedPreset,
+    ['dirs:', '  - ./cache', 'exclude:', '  - ./cache/tmp', 'summary: true'].join('\n')
+  );
   const mainPreset = path.join(presetTmp, 'main.json');
-  fs.writeFileSync(mainPreset, JSON.stringify({
-    presets: ['shared.yaml'],
-    dirs: ['./logs'],
-    dryRun: true,
-    maxAge: '2h',
-    concurrency: 2,
-    logFile: './run.log',
-    preview: true
-  }));
-  assert.ok(parseArgs(['--config', mainPreset]), 'Комбінована конфігурація має застосовуватися без помилок');
+  fs.writeFileSync(
+    mainPreset,
+    JSON.stringify({
+      presets: ['shared.yaml'],
+      dirs: ['./logs'],
+      dryRun: true,
+      maxAge: '2h',
+      concurrency: 2,
+      logFile: './run.log',
+      preview: true
+    })
+  );
+  assert.ok(
+    parseArgs(['--config', mainPreset]),
+    'Комбінована конфігурація має застосовуватися без помилок'
+  );
   const optsFromPreset = getOptions();
   assert.ok(optsFromPreset.dryRun, 'dry-run з пресету має бути увімкнено');
   assert.ok(optsFromPreset.summary, 'summary із вкладеного пресету має бути увімкнено');
-  assert.strictEqual(optsFromPreset.maxAgeMs, 2 * 60 * 60 * 1000, 'maxAge з YAML має бути сконвертовано у мілісекунди');
-  assert.strictEqual(optsFromPreset.concurrency, 2, 'concurrency має застосовуватися з конфігурації');
+  assert.strictEqual(
+    optsFromPreset.maxAgeMs,
+    2 * 60 * 60 * 1000,
+    'maxAge з YAML має бути сконвертовано у мілісекунди'
+  );
+  assert.strictEqual(
+    optsFromPreset.concurrency,
+    2,
+    'concurrency має застосовуватися з конфігурації'
+  );
   assert.ok(optsFromPreset.parallel, 'parallel має активуватися автоматично при concurrency > 1');
   assert.ok(
     optsFromPreset.extraDirs.includes(path.resolve(presetTmp, 'cache')),
@@ -176,7 +214,10 @@ const {
   fs.mkdirSync(repoPresetDir, { recursive: true });
   const repoPresetFile = path.join(repoPresetDir, 'ci.yaml');
   fs.writeFileSync(repoPresetFile, ['dryRun: true', 'parallel: true'].join('\n'));
-  assert.ok(parseArgs(['--preset', 'ci']), 'Пресет за назвою має бути знайдений у каталозі presets');
+  assert.ok(
+    parseArgs(['--preset', 'ci']),
+    'Пресет за назвою має бути знайдений у каталозі presets'
+  );
   const optsFromNamedPreset = getOptions();
   assert.ok(optsFromNamedPreset.dryRun, 'dryRun з пресету має бути увімкнено');
   assert.ok(optsFromNamedPreset.parallel, 'parallel з пресету має бути увімкнено');
@@ -194,21 +235,25 @@ const {
   resetOptions();
   const bundleDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-bundle-'));
   const baseConfig = path.join(bundleDir, '10-base.yaml');
-  fs.writeFileSync(baseConfig, [
-    'dryRun: true',
-    'summary: true',
-    'dirs:',
-    '  - ./cache'
-  ].join('\n'));
+  fs.writeFileSync(
+    baseConfig,
+    ['dryRun: true', 'summary: true', 'dirs:', '  - ./cache'].join('\n')
+  );
   const overrideConfig = path.join(bundleDir, '20-override.json');
-  fs.writeFileSync(overrideConfig, JSON.stringify({
-    parallel: true,
-    dryRun: false,
-    dirs: ['./logs']
-  }));
+  fs.writeFileSync(
+    overrideConfig,
+    JSON.stringify({
+      parallel: true,
+      dryRun: false,
+      dirs: ['./logs']
+    })
+  );
   fs.mkdirSync(path.join(bundleDir, 'cache'), { recursive: true });
   fs.mkdirSync(path.join(bundleDir, 'logs'), { recursive: true });
-  assert.ok(parseArgs(['--config', bundleDir]), 'Каталог конфігурацій має застосовуватися як пакет');
+  assert.ok(
+    parseArgs(['--config', bundleDir]),
+    'Каталог конфігурацій має застосовуватися як пакет'
+  );
   const optsFromBundle = getOptions();
   assert.ok(optsFromBundle.summary, 'summary має залишатися з базового конфігу');
   assert.ok(optsFromBundle.parallel, 'parallel має застосовуватися з другого конфігу');
@@ -249,7 +294,11 @@ const {
     'Каталог без JSON/YAML файлів має повертати помилку'
   );
   const optsAfterEmptyBundle = getOptions();
-  assert.strictEqual(optsAfterEmptyBundle.extraDirs.length, 0, 'Опції не мають змінюватися після порожнього каталогу');
+  assert.strictEqual(
+    optsAfterEmptyBundle.extraDirs.length,
+    0,
+    'Опції не мають змінюватися після порожнього каталогу'
+  );
   resetOptions();
   fs.rmSync(emptyBundleDir, { recursive: true, force: true });
 
@@ -257,9 +306,16 @@ const {
   resetOptions();
   const badConfig = path.join(os.tmpdir(), 'db-bad.yaml');
   fs.writeFileSync(badConfig, 'dirs: 123\n');
-  assert.ok(!parseArgs(['--config', badConfig]), 'Помилкова конфігурація має сигналізувати про помилку');
+  assert.ok(
+    !parseArgs(['--config', badConfig]),
+    'Помилкова конфігурація має сигналізувати про помилку'
+  );
   const optsAfterBad = getOptions();
-  assert.strictEqual(optsAfterBad.extraDirs.length, 0, 'Налаштування не мають змінюватися після помилки конфігурації');
+  assert.strictEqual(
+    optsAfterBad.extraDirs.length,
+    0,
+    'Налаштування не мають змінюватися після помилки конфігурації'
+  );
   fs.rmSync(badConfig, { force: true });
 
   // Тест режиму попереднього перегляду (відмова)
