@@ -2,8 +2,56 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { execSync } = require('child_process');
+const childProcess = require('child_process');
 const readline = require('readline');
+
+let execSyncHandler = childProcess.execSync;
+let platformOverride = null;
+let nodeVersionOverride = null;
+let mainOverride = null;
+let parsedOkOverride = null;
+
+function setExecSyncHandler(handler) {
+  execSyncHandler = typeof handler === 'function' ? handler : childProcess.execSync;
+}
+
+function setPlatformOverride(platform) {
+  platformOverride = typeof platform === 'string' ? platform : null;
+}
+
+function currentPlatform() {
+  return platformOverride || process.platform;
+}
+
+function setNodeVersionOverride(major) {
+  if (typeof major === 'number' && Number.isFinite(major)) {
+    nodeVersionOverride = major;
+  } else {
+    nodeVersionOverride = null;
+  }
+}
+
+function currentNodeMajor() {
+  if (typeof nodeVersionOverride === 'number') {
+    return nodeVersionOverride;
+  }
+  return parseInt(process.versions.node.split('.')[0], 10);
+}
+
+function setMainOverride(value) {
+  mainOverride = typeof value === 'boolean' ? value : null;
+}
+
+function isRunningAsMain() {
+  if (typeof mainOverride === 'boolean') {
+    return mainOverride;
+  }
+  return require.main === module;
+}
+
+function setParsedOkOverride(value) {
+  parsedOkOverride = typeof value === 'boolean' ? value : null;
+}
 const YAML = require('yaml');
 
 // мінімально сумісна версія Node.js
@@ -233,6 +281,10 @@ function parseDuration(value) {
 
 function originPrefix(origin) {
   return origin ? `[${origin}] ` : '';
+}
+
+function extractErrorMessage(err) {
+  return err instanceof Error ? err.message : String(err);
 }
 
 function setMaxAge(value, origin) {
@@ -524,7 +576,9 @@ function parseConfigFile(filePath, visited = new Set()) {
   try {
     raw = fs.readFileSync(normalized, 'utf8');
   } catch (err) {
-    throw new Error(`${originPrefix(normalized)}Не вдалося прочитати файл: ${err.message}`);
+    throw new Error(
+      `${originPrefix(normalized)}Не вдалося прочитати файл: ${extractErrorMessage(err)}`
+    );
   }
 
   const ext = path.extname(normalized).toLowerCase();
@@ -548,10 +602,9 @@ function parseConfigFile(filePath, visited = new Set()) {
       }
     }
   } catch (err) {
-    if (err instanceof Error) {
-      throw new Error(`${originPrefix(normalized)}Не вдалося розпарсити конфіг: ${err.message}`);
-    }
-    throw err;
+    throw new Error(
+      `${originPrefix(normalized)}Не вдалося розпарсити конфіг: ${extractErrorMessage(err)}`
+    );
   }
 
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
@@ -623,11 +676,7 @@ function applyConfigFromPath(resolvedPath) {
     applyConfigData(data, resolvedPath);
     return true;
   } catch (err) {
-    if (err instanceof Error) {
-      console.error(err.message);
-      return false;
-    }
-    console.error(err);
+    console.error(extractErrorMessage(err));
     return false;
   }
 }
@@ -637,12 +686,9 @@ function listConfigFilesInDirectory(directory) {
   try {
     entries = fs.readdirSync(directory, { withFileTypes: true });
   } catch (err) {
-    if (err instanceof Error) {
-      throw new Error(
-        `${originPrefix(directory)}Не вдалося прочитати каталог конфігурацій: ${err.message}`
-      );
-    }
-    throw err;
+    throw new Error(
+      `${originPrefix(directory)}Не вдалося прочитати каталог конфігурацій: ${extractErrorMessage(err)}`
+    );
   }
 
   const files = entries
@@ -660,11 +706,7 @@ function applyConfigFromDirectory(resolvedDir) {
   try {
     files = listConfigFilesInDirectory(resolvedDir);
   } catch (err) {
-    if (err instanceof Error) {
-      console.error(err.message);
-      return false;
-    }
-    console.error(err);
+    console.error(extractErrorMessage(err));
     return false;
   }
 
@@ -682,11 +724,7 @@ function applyConfigFromDirectory(resolvedDir) {
       const data = parseConfigFile(file);
       accumulated = mergePresetData(accumulated, data);
     } catch (err) {
-      if (err instanceof Error) {
-        console.error(err.message);
-        return false;
-      }
-      console.error(err);
+      console.error(extractErrorMessage(err));
       return false;
     }
   }
@@ -695,11 +733,7 @@ function applyConfigFromDirectory(resolvedDir) {
     applyConfigData(accumulated, `${resolvedDir}${path.sep}*`);
     return true;
   } catch (err) {
-    if (err instanceof Error) {
-      console.error(err.message);
-      return false;
-    }
-    console.error(err);
+    console.error(extractErrorMessage(err));
     return false;
   }
 }
@@ -713,11 +747,9 @@ function handleConfigArgument(configPath) {
   try {
     stat = fs.statSync(resolved);
   } catch (err) {
-    if (err instanceof Error) {
-      console.error(`${originPrefix(resolved)}Не вдалося отримати дані про шлях: ${err.message}`);
-      return false;
-    }
-    console.error(err);
+    console.error(
+      `${originPrefix(resolved)}Не вдалося отримати дані про шлях: ${extractErrorMessage(err)}`
+    );
     return false;
   }
 
@@ -738,11 +770,7 @@ function handlePresetArgument(presetRef) {
     const resolved = resolvePreset(presetRef, process.cwd());
     return applyConfigFromPath(resolved);
   } catch (err) {
-    if (err instanceof Error) {
-      console.error(err.message);
-      return false;
-    }
-    console.error(err);
+    console.error(extractErrorMessage(err));
     return false;
   }
 }
@@ -788,7 +816,7 @@ function pushIfExists(list, dir) {
 
 function isAdmin() {
   try {
-    execSync('net session >nul 2>&1');
+    execSyncHandler('net session >nul 2>&1');
     return true;
   } catch {
     return false;
@@ -801,35 +829,37 @@ function advancedWindowsClean() {
     return;
   }
   try {
-    execSync('PowerShell -NoLogo -NoProfile -Command "Clear-RecycleBin -Force"', {
+    execSyncHandler('PowerShell -NoLogo -NoProfile -Command "Clear-RecycleBin -Force"', {
       stdio: 'inherit'
     });
   } catch {}
   try {
-    execSync('dism /online /Cleanup-Image /StartComponentCleanup /ResetBase', { stdio: 'inherit' });
+    execSyncHandler('dism /online /Cleanup-Image /StartComponentCleanup /ResetBase', {
+      stdio: 'inherit'
+    });
   } catch {}
   try {
-    execSync('RunDll32.exe InetCpl.cpl,ClearMyTracksByProcess 8', { stdio: 'inherit' });
+    execSyncHandler('RunDll32.exe InetCpl.cpl,ClearMyTracksByProcess 8', { stdio: 'inherit' });
   } catch {}
   try {
-    const logs = execSync('wevtutil.exe el', { encoding: 'utf8' }).trim().split(/\r?\n/);
+    const logs = execSyncHandler('wevtutil.exe el', { encoding: 'utf8' }).trim().split(/\r?\n/);
     logs.forEach((log) => {
       if (log) {
         try {
-          execSync(`wevtutil.exe cl "${log}"`);
+          execSyncHandler(`wevtutil.exe cl "${log}"`);
         } catch {}
       }
     });
   } catch {}
   try {
-    execSync('net stop wuauserv', { stdio: 'inherit' });
-    execSync('net stop bits', { stdio: 'inherit' });
+    execSyncHandler('net stop wuauserv', { stdio: 'inherit' });
+    execSyncHandler('net stop bits', { stdio: 'inherit' });
     fs.rmSync(path.join(process.env.WINDIR || 'C:/Windows', 'SoftwareDistribution'), {
       recursive: true,
       force: true
     });
-    execSync('net start wuauserv', { stdio: 'inherit' });
-    execSync('net start bits', { stdio: 'inherit' });
+    execSyncHandler('net start wuauserv', { stdio: 'inherit' });
+    execSyncHandler('net start bits', { stdio: 'inherit' });
   } catch {}
 }
 
@@ -920,21 +950,16 @@ async function runWithLimit(tasks, limit) {
 
   const scheduleNext = () => {
     if (index >= tasks.length) {
+      /* istanbul ignore next */
       return null;
     }
     const task = tasks[index++]();
-    const promise = task
-      .then((result) => {
-        executing.delete(promise);
-        return result;
-      })
-      .catch((err) => {
-        executing.delete(promise);
-        throw err;
-      });
-    executing.add(promise);
-    results.push(promise);
-    return promise;
+    const wrapped = Promise.resolve(task).finally(() => {
+      executing.delete(wrapped);
+    });
+    executing.add(wrapped);
+    results.push(wrapped);
+    return wrapped;
   };
 
   while (executing.size < limit && index < tasks.length) {
@@ -980,6 +1005,7 @@ async function removeDirContents(dir, metrics = createMetrics()) {
       try {
         info = await inspectPath(fullPath, stat);
       } catch (err) {
+        /* istanbul ignore next */
         console.error(`Не вдалося оцінити ${fullPath}:`, err.message);
         metrics.errors += 1;
         continue;
@@ -1014,7 +1040,7 @@ async function clean({ targets: targetOverride } = {}) {
     targetOverride.forEach((dir) => pushIfExists(targets, dir));
   } else {
     pushIfExists(targets, os.tmpdir());
-    if (process.platform === 'win32') {
+    if (currentPlatform() === 'win32') {
       const winDir = process.env.WINDIR || 'C:/Windows';
       pushIfExists(targets, path.join(winDir, 'Temp'));
       pushIfExists(targets, path.join(winDir, 'Prefetch'));
@@ -1043,7 +1069,7 @@ async function clean({ targets: targetOverride } = {}) {
       if (process.env.APPDATA) {
         pushIfExists(targets, path.join(process.env.APPDATA, 'npm-cache'));
       }
-    } else if (process.platform === 'darwin') {
+    } else if (currentPlatform() === 'darwin') {
       pushIfExists(targets, '/var/tmp');
       pushIfExists(targets, path.join(os.homedir(), 'Library', 'Caches'));
       pushIfExists(targets, path.join(os.homedir(), 'Library', 'Logs'));
@@ -1133,32 +1159,53 @@ async function clean({ targets: targetOverride } = {}) {
     logSummary(total);
   }
 
-  if (deepClean && process.platform === 'win32') {
+  if (deepClean && currentPlatform() === 'win32') {
     advancedWindowsClean();
   }
 
   return total;
 }
 
-const parsedOk = parseArgs();
+let cleanInvoker = clean;
 
-if (parseInt(process.versions.node.split('.')[0], 10) < MIN_NODE_MAJOR) {
-  console.error(`Потрібна Node.js >= ${MIN_NODE_MAJOR}. Поточна ${process.versions.node}`);
-  process.exit(1);
+function setCleanOverride(handler) {
+  cleanInvoker = typeof handler === 'function' ? handler : clean;
 }
 
-if (require.main === module) {
+const parsedOk = parseArgs();
+
+function isParsedOk() {
+  return parsedOkOverride !== null ? parsedOkOverride : parsedOk;
+}
+
+function runCli() {
+  if (currentNodeMajor() < MIN_NODE_MAJOR) {
+    console.error(`Потрібна Node.js >= ${MIN_NODE_MAJOR}. Поточна ${process.versions.node}`);
+    process.exit(1);
+    return;
+  }
+
+  if (!isRunningAsMain()) {
+    return;
+  }
+
   if (helpRequested) {
     printHelp();
-    process.exit(parsedOk ? 0 : 1);
+    process.exit(isParsedOk() ? 0 : 1);
+    return;
   }
-  if (!parsedOk) {
+
+  if (!isParsedOk()) {
     process.exit(1);
+    return;
   }
-  clean().catch((err) => {
+
+  Promise.resolve(cleanInvoker()).catch((err) => {
     console.error('Помилка виконання скрипту:', err);
   });
 }
+
+runCli();
 
 function getOptions() {
   return {
@@ -1201,5 +1248,13 @@ module.exports = {
   getOptions,
   clean,
   resetOptions,
-  setPreviewPromptHandler
+  setPreviewPromptHandler,
+  setExecSyncHandler,
+  setPlatformOverride,
+  setNodeVersionOverride,
+  setMainOverride,
+  setParsedOkOverride,
+  runCli,
+  setCleanOverride,
+  runWithLimit
 };

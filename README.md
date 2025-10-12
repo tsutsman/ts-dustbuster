@@ -86,6 +86,7 @@ node test.js
 - `npm run lint` — перевіряє код ESLint за рекомендаціями Node.js і інтегрованим форматуванням Prettier.
 - `npm run format:check` — гарантує відповідність стилю Prettier без зміни файлів.
 - `npm run format` — застосовує форматування Prettier, якщо потрібно швидко вирівняти стиль.
+- `npm run test:coverage` — запускає юніт-тести під керуванням `nyc` та генерує звіт покриття (текст і LCOV) з порогом 80%.
 
 Husky підключено як pre-commit гак і автоматично запускає `npm run lint` та `npm run format:check` перед створенням коміту.
 

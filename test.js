@@ -9,8 +9,19 @@ const {
   getOptions,
   clean,
   resetOptions,
-  setPreviewPromptHandler
+  advancedWindowsClean,
+  setPreviewPromptHandler,
+  setExecSyncHandler,
+  setPlatformOverride,
+  setNodeVersionOverride,
+  setMainOverride,
+  setParsedOkOverride,
+  runCli,
+  setCleanOverride,
+  runWithLimit
 } = require('./cleaner');
+
+const CURRENT_NODE_MAJOR = parseInt(process.versions.node.split('.')[0], 10);
 
 (async () => {
   // Тест pushIfExists
@@ -39,6 +50,12 @@ const {
   );
   assert.strictEqual(metricsAfterRemove.dirs, 1, 'Має бути видалено одну піддиректорію');
   fs.rmdirSync(tmp);
+
+  const missingMetrics = await removeDirContents(path.join(os.tmpdir(), 'db-missing-nonexistent'));
+  assert.ok(
+    missingMetrics.errors >= 1,
+    'Помилка читання каталогу має збільшувати лічильник помилок'
+  );
 
   // Тест parseArgs
   resetOptions();
@@ -77,6 +94,17 @@ const {
   assert.ok(parseArgs(['--help']), 'Прапорець --help має зчитуватися без помилок');
   const optsHelp = getOptions();
   assert.ok(optsHelp.helpRequested, 'Опція help має позначати необхідність показу довідки');
+
+  resetOptions();
+  const customDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-extra-dir-'));
+  assert.ok(parseArgs(['--dir', customDir]), '--dir має додавати новий каталог');
+  const optsWithDir = getOptions();
+  assert.ok(
+    optsWithDir.extraDirs.includes(path.resolve(customDir)),
+    'Додатковий каталог має бути збережений у налаштуваннях'
+  );
+  resetOptions();
+  fs.rmSync(customDir, { recursive: true, force: true });
 
   // Тест --concurrency
   resetOptions();
@@ -343,6 +371,561 @@ const {
   assert.strictEqual(confirmMetrics.files, 1, 'Повинен бути видалений один файл');
   resetOptions();
   fs.rmSync(previewConfirmDir, { recursive: true, force: true });
+
+  // Негативні сценарії parseArgs (відсутні значення)
+  resetOptions();
+  assert.ok(!parseArgs(['--log']), 'Прапорець --log без значення має спричиняти помилку');
+  resetOptions();
+  assert.ok(!parseArgs(['--dir']), 'Прапорець --dir без шляху має повертати помилку');
+  resetOptions();
+  assert.ok(!parseArgs(['--exclude']), 'Прапорець --exclude без шляху має повертати помилку');
+  resetOptions();
+  assert.ok(!parseArgs(['--max-age']), 'Прапорець --max-age без значення має повертати помилку');
+  resetOptions();
+  assert.ok(
+    !parseArgs(['--concurrency']),
+    'Прапорець --concurrency без числа має повертати помилку'
+  );
+  resetOptions();
+  assert.ok(!parseArgs(['--config']), 'Прапорець --config без шляху має повертати помилку');
+  resetOptions();
+  assert.ok(!parseArgs(['--preset']), 'Прапорець --preset без аргументу має повертати помилку');
+  resetOptions();
+  assert.ok(
+    !parseArgs(['--preset', './неіснуючий-пресет.yaml']),
+    'Помилковий шлях пресету має спричиняти помилку'
+  );
+
+  resetOptions();
+  const originalStatSync = fs.statSync;
+  try {
+    fs.statSync = () => ({
+      isDirectory: () => false,
+      isFile: () => false
+    });
+    assert.ok(
+      !parseArgs(['--config', 'фіктивний-шлях']),
+      'Непідтримуваний тип шляху має відхиляти конфіг'
+    );
+  } finally {
+    fs.statSync = originalStatSync;
+  }
+
+  resetOptions();
+  const originalReaddirSync = fs.readdirSync;
+  try {
+    fs.readdirSync = () => {
+      throw new Error('readdir-fail');
+    };
+    assert.ok(
+      !parseArgs(['--config', os.tmpdir()]),
+      'Помилка читання каталогу має переривати застосування'
+    );
+  } finally {
+    fs.readdirSync = originalReaddirSync;
+  }
+
+  resetOptions();
+  const invalidConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-invalid-config-'));
+  const invalidConfigFile = path.join(invalidConfigDir, 'bad.json');
+  fs.writeFileSync(invalidConfigFile, JSON.stringify({ concurrency: 'bad' }));
+  assert.ok(
+    !parseArgs(['--config', invalidConfigFile]),
+    'Хибне значення concurrency в конфігу має спричиняти помилку'
+  );
+  resetOptions();
+  fs.rmSync(invalidConfigDir, { recursive: true, force: true });
+
+  resetOptions();
+  const arrayConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-array-config-'));
+  const arrayConfigFile = path.join(arrayConfigDir, 'array.json');
+  fs.writeFileSync(arrayConfigFile, JSON.stringify([]));
+  assert.ok(
+    !parseArgs(['--config', arrayConfigFile]),
+    'Конфігурація з масивом має відхилятися як некоректна'
+  );
+  resetOptions();
+  fs.rmSync(arrayConfigDir, { recursive: true, force: true });
+
+  resetOptions();
+  const nullConcurrencyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-null-concurrency-'));
+  const nullConcurrencyFile = path.join(nullConcurrencyDir, 'null.json');
+  fs.writeFileSync(nullConcurrencyFile, JSON.stringify({ concurrency: null }));
+  assert.ok(parseArgs(['--config', nullConcurrencyFile]), 'concurrency=null має скидати обмеження');
+  const optsNullConcurrency = getOptions();
+  assert.strictEqual(
+    optsNullConcurrency.concurrency,
+    null,
+    'concurrency має встановлюватися у null'
+  );
+  resetOptions();
+  fs.rmSync(nullConcurrencyDir, { recursive: true, force: true });
+
+  // Некоректні значення max-age та concurrency
+  resetOptions();
+  assert.ok(!parseArgs(['--max-age', 'abc']), 'Неправильний формат max-age має відхилятися');
+  const optsAfterBadMaxAge = getOptions();
+  assert.strictEqual(
+    optsAfterBadMaxAge.maxAgeMs,
+    null,
+    'maxAgeMs не має змінюватися після помилки'
+  );
+
+  resetOptions();
+  assert.ok(!parseArgs(['--concurrency', '0']), 'Нульове значення concurrency має відхилятися');
+  const optsAfterZeroConcurrency = getOptions();
+  assert.strictEqual(
+    optsAfterZeroConcurrency.concurrency,
+    null,
+    'concurrency не змінюється після нуля'
+  );
+
+  resetOptions();
+  assert.ok(!parseArgs(['--concurrency', 'abc']), 'Нечислове значення concurrency має відхилятися');
+  const optsAfterFractionConcurrency = getOptions();
+  assert.strictEqual(
+    optsAfterFractionConcurrency.concurrency,
+    null,
+    'concurrency не встановлюється рядком'
+  );
+
+  resetOptions();
+  const fractionalConfigPath = path.join(os.tmpdir(), 'db-config-fractional.json');
+  fs.writeFileSync(fractionalConfigPath, JSON.stringify({ concurrency: 2.5 }));
+  assert.ok(
+    !parseArgs(['--config', fractionalConfigPath]),
+    'Дробове значення concurrency у конфігурації має відхилятися'
+  );
+  const optsAfterFractionConfig = getOptions();
+  assert.strictEqual(
+    optsAfterFractionConfig.concurrency,
+    null,
+    'concurrency не встановлюється дробовим значенням із конфігу'
+  );
+  fs.unlinkSync(fractionalConfigPath);
+
+  // Конкурентне очищення для перевірки runWithLimit та formatBytes
+  resetOptions();
+  const parallelDirA = fs.mkdtempSync(path.join(os.tmpdir(), 'db-parallel-A-'));
+  const parallelDirB = fs.mkdtempSync(path.join(os.tmpdir(), 'db-parallel-B-'));
+  const parallelDirC = fs.mkdtempSync(path.join(os.tmpdir(), 'db-parallel-C-'));
+  const heavyFile = path.join(parallelDirA, 'heavy.bin');
+  fs.writeFileSync(heavyFile, 'a'.repeat(2048));
+  const parallelNestedDir = path.join(parallelDirA, 'nested');
+  fs.mkdirSync(parallelNestedDir);
+  fs.writeFileSync(path.join(parallelNestedDir, 'inner.log'), 'data');
+  fs.writeFileSync(path.join(parallelDirB, 'light.txt'), 'temp');
+  fs.writeFileSync(path.join(parallelDirC, 'extra.txt'), 'cache');
+  assert.ok(
+    parseArgs(['--concurrency', '2', '--summary']),
+    'Конкурентний режим має вмикатися без помилок'
+  );
+  const parallelMetrics = await clean({ targets: [parallelDirA, parallelDirB, parallelDirC] });
+  assert.ok(
+    parallelMetrics.files >= 4,
+    'Очікується принаймні чотири видалені файли з трьох каталогів'
+  );
+  assert.ok(parallelMetrics.dirs >= 1, 'Повинна бути врахована принаймні одна піддиректорія');
+  assert.strictEqual(parallelMetrics.errors, 0, 'Очищення має проходити без помилок');
+  assert.ok(parallelMetrics.bytes >= 2048, 'Звільнений обсяг має враховувати великий файл');
+  fs.rmSync(parallelDirA, { recursive: true, force: true });
+  fs.rmSync(parallelDirB, { recursive: true, force: true });
+  fs.rmSync(parallelDirC, { recursive: true, force: true });
+
+  await assert.rejects(
+    runWithLimit([() => Promise.resolve('ok'), () => Promise.reject(new Error('boom'))], 2),
+    /boom/,
+    'runWithLimit має передавати відмову задачі далі'
+  );
+
+  // Фільтрація до порожнього списку з підсумком
+  resetOptions();
+  const excludedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-empty-'));
+  parseArgs(['--exclude', excludedDir, '--summary']);
+  const emptyMetrics = await clean({ targets: [excludedDir] });
+  assert.strictEqual(emptyMetrics.files, 0, 'При повному виключенні не має бути видалених файлів');
+  assert.strictEqual(emptyMetrics.dirs, 0, 'Порожній список не має містити директорій');
+  fs.rmSync(excludedDir, { recursive: true, force: true });
+
+  // macOS гілка з імітованим домашнім каталогом
+  resetOptions();
+  const originalHomedir = os.homedir;
+  const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'db-mac-home-'));
+  const macPaths = [
+    path.join(fakeHome, 'Library', 'Caches'),
+    path.join(fakeHome, 'Library', 'Logs'),
+    path.join(fakeHome, 'Library', 'Application Support', 'Google', 'Chrome', 'Default', 'Cache'),
+    path.join(fakeHome, 'Library', 'Application Support', 'Code', 'Cache'),
+    path.join(fakeHome, 'Library', 'Application Support', 'Microsoft Edge', 'Default', 'Cache')
+  ];
+  macPaths.forEach((dir) => {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'keep.txt'), 'mac');
+  });
+  const originalExistsSync = fs.existsSync;
+  const allowedMacPaths = new Set(macPaths.map((dir) => path.resolve(dir)));
+  try {
+    fs.existsSync = (target) => allowedMacPaths.has(path.resolve(target));
+    os.homedir = () => fakeHome;
+    setPlatformOverride('darwin');
+    assert.ok(parseArgs(['--dry-run']), 'dry-run має застосовуватися для macOS гілки');
+    const macMetrics = await clean();
+    assert.strictEqual(macMetrics.errors, 0, 'macOS гілка не має спричиняти помилок');
+  } finally {
+    setPlatformOverride(null);
+    fs.existsSync = originalExistsSync;
+    os.homedir = originalHomedir;
+    fs.rmSync(fakeHome, { recursive: true, force: true });
+  }
+
+  // Linux/Unix гілка з кастомним домашнім каталогом
+  resetOptions();
+  const originalHomedirLinux = os.homedir;
+  const fakeLinuxHome = fs.mkdtempSync(path.join(os.tmpdir(), 'db-linux-home-'));
+  const linuxPaths = [
+    path.join(fakeLinuxHome, '.cache'),
+    path.join(fakeLinuxHome, '.cache', 'npm'),
+    path.join(fakeLinuxHome, '.cache', 'yarn'),
+    path.join(fakeLinuxHome, '.cache', 'pip'),
+    path.join(fakeLinuxHome, '.cache', 'google-chrome'),
+    path.join(fakeLinuxHome, '.cache', 'chromium'),
+    path.join(fakeLinuxHome, '.cache', 'Code', 'Cache'),
+    path.join(fakeLinuxHome, '.npm')
+  ];
+  linuxPaths.forEach((dir) => {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'keep.txt'), 'linux');
+  });
+  const originalExistsLinux = fs.existsSync;
+  const allowedLinuxPaths = new Set(linuxPaths.map((dir) => path.resolve(dir)));
+  try {
+    fs.existsSync = (target) => allowedLinuxPaths.has(path.resolve(target));
+    os.homedir = () => fakeLinuxHome;
+    setPlatformOverride('linux');
+    assert.ok(parseArgs(['--dry-run', '--parallel']), 'parallel має вмикатися у Linux гілці');
+    const linuxMetrics = await clean();
+    assert.strictEqual(linuxMetrics.errors, 0, 'Linux гілка має працювати без помилок');
+  } finally {
+    setPlatformOverride(null);
+    fs.existsSync = originalExistsLinux;
+    os.homedir = originalHomedirLinux;
+    fs.rmSync(fakeLinuxHome, { recursive: true, force: true });
+  }
+
+  // Windows гілка без кастомних таргетів
+  resetOptions();
+  const winEnvBackup = {
+    WINDIR: process.env.WINDIR,
+    SystemDrive: process.env.SystemDrive,
+    LOCALAPPDATA: process.env.LOCALAPPDATA,
+    APPDATA: process.env.APPDATA
+  };
+  const winRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'db-win-root-'));
+  process.env.WINDIR = path.join(winRoot, 'Windows');
+  process.env.SystemDrive = winRoot;
+  process.env.LOCALAPPDATA = path.join(winRoot, 'Local');
+  process.env.APPDATA = path.join(winRoot, 'Roaming');
+  const winPaths = [
+    path.join(process.env.WINDIR, 'Temp'),
+    path.join(process.env.WINDIR, 'Prefetch'),
+    path.join(process.env.WINDIR, 'SoftwareDistribution', 'Download'),
+    path.join(process.env.WINDIR, 'System32', 'LogFiles'),
+    path.join(process.env.SystemDrive, 'Temp'),
+    path.join(process.env.SystemDrive, '$Recycle.Bin'),
+    path.join(process.env.LOCALAPPDATA, 'Microsoft', 'Windows', 'INetCache'),
+    path.join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'User Data', 'Default', 'Cache'),
+    path.join(process.env.LOCALAPPDATA, 'Microsoft', 'Edge', 'User Data', 'Default', 'Cache'),
+    path.join(process.env.LOCALAPPDATA, 'CrashDumps'),
+    path.join(process.env.APPDATA, 'npm-cache')
+  ];
+  winPaths.forEach((dir) => {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'keep.txt'), 'win');
+  });
+  const originalExistsWin = fs.existsSync;
+  const allowedWinPaths = new Set(winPaths.map((dir) => path.resolve(dir)));
+  try {
+    fs.existsSync = (target) => allowedWinPaths.has(path.resolve(target));
+    setPlatformOverride('win32');
+    assert.ok(parseArgs(['--dry-run']), 'dry-run має працювати у Windows гілці');
+    const winMetrics = await clean();
+    assert.strictEqual(winMetrics.errors, 0, 'Windows гілка не повинна створювати помилки');
+  } finally {
+    setPlatformOverride(null);
+    fs.existsSync = originalExistsWin;
+    fs.rmSync(winRoot, { recursive: true, force: true });
+    process.env.WINDIR = winEnvBackup.WINDIR;
+    process.env.SystemDrive = winEnvBackup.SystemDrive;
+    process.env.LOCALAPPDATA = winEnvBackup.LOCALAPPDATA;
+    process.env.APPDATA = winEnvBackup.APPDATA;
+  }
+
+  // Помилка fs.promises.rm у removeDirContents
+  resetOptions();
+  const errorDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-rm-error-'));
+  fs.writeFileSync(path.join(errorDir, 'file.txt'), 'data');
+  const originalRm = fs.promises.rm;
+  try {
+    fs.promises.rm = async () => {
+      throw new Error('rm-failed');
+    };
+    const metricsAfterError = await clean({ targets: [errorDir] });
+    assert.ok(metricsAfterError.errors >= 1, 'Помилка видалення має збільшувати лічильник помилок');
+  } finally {
+    fs.promises.rm = originalRm;
+    fs.rmSync(errorDir, { recursive: true, force: true });
+  }
+
+  // Помилка fs.promises.lstat у removeDirContents
+  resetOptions();
+  const lstatDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-lstat-error-'));
+  const lstatFile = path.join(lstatDir, 'entry.txt');
+  fs.writeFileSync(lstatFile, 'data');
+  const originalLstat = fs.promises.lstat;
+  try {
+    let failNextLstat = true;
+    fs.promises.lstat = async (target) => {
+      if (failNextLstat && target.endsWith('entry.txt')) {
+        failNextLstat = false;
+        throw new Error('lstat-failed');
+      }
+      return originalLstat(target);
+    };
+    const metricsAfterLstatError = await clean({ targets: [lstatDir] });
+    assert.ok(
+      metricsAfterLstatError.errors >= 1,
+      'Помилка lstat має збільшувати лічильник помилок'
+    );
+  } finally {
+    fs.promises.lstat = originalLstat;
+    fs.rmSync(lstatDir, { recursive: true, force: true });
+  }
+
+  // Виклик deep-clean через clean під Windows
+  resetOptions();
+  const deepDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-deep-clean-'));
+  fs.writeFileSync(path.join(deepDir, 'deep.tmp'), 'cache');
+  const deepEnvBackup = {
+    WINDIR: process.env.WINDIR,
+    SystemDrive: process.env.SystemDrive,
+    LOCALAPPDATA: process.env.LOCALAPPDATA,
+    APPDATA: process.env.APPDATA
+  };
+  process.env.WINDIR = process.env.WINDIR || 'C:/Windows';
+  process.env.SystemDrive = process.env.SystemDrive || 'C:';
+  process.env.LOCALAPPDATA = process.env.LOCALAPPDATA || 'C:/Users/Test/AppData/Local';
+  process.env.APPDATA = process.env.APPDATA || 'C:/Users/Test/AppData/Roaming';
+  const deepCommands = [];
+  const originalRmSyncDeep = fs.rmSync;
+  try {
+    fs.rmSync = (target, options) => {
+      deepCommands.push(`rm:${target}`);
+      return originalRmSyncDeep.call(fs, target, {
+        recursive: true,
+        force: true,
+        ...(options || {})
+      });
+    };
+    setExecSyncHandler((cmd, options = {}) => {
+      deepCommands.push(cmd);
+      if (cmd.startsWith('net session')) {
+        return '';
+      }
+      if (cmd.startsWith('wevtutil.exe el')) {
+        return options.encoding === 'utf8' ? 'Application\nSystem\n' : Buffer.from('Application\n');
+      }
+      return '';
+    });
+    setPlatformOverride('win32');
+    assert.ok(parseArgs(['--deep', '--summary']), 'Прапорець deep має зчитуватися без помилок');
+    const deepMetrics = await clean({ targets: [deepDir] });
+    assert.ok(deepMetrics.files >= 1, 'Глибоке очищення має видаляти локальні файли');
+    assert.ok(
+      deepCommands.some((cmd) => cmd.includes('Clear-RecycleBin')),
+      'При deep-clean мають виконуватися додаткові команди очищення'
+    );
+  } finally {
+    setExecSyncHandler(null);
+    setPlatformOverride(null);
+    fs.rmSync = originalRmSyncDeep;
+    originalRmSyncDeep.call(fs, deepDir, { recursive: true, force: true });
+    process.env.WINDIR = deepEnvBackup.WINDIR;
+    process.env.SystemDrive = deepEnvBackup.SystemDrive;
+    process.env.LOCALAPPDATA = deepEnvBackup.LOCALAPPDATA;
+    process.env.APPDATA = deepEnvBackup.APPDATA;
+  }
+
+  // advancedWindowsClean без прав адміністратора
+  const commandsNoAdmin = [];
+  setExecSyncHandler(null);
+
+  try {
+    setExecSyncHandler((cmd) => {
+      commandsNoAdmin.push(cmd);
+      if (cmd.startsWith('net session')) {
+        throw new Error('відмова у доступі');
+      }
+      return '';
+    });
+    advancedWindowsClean();
+    assert.strictEqual(
+      commandsNoAdmin.length,
+      1,
+      'Без прав адміністратора має виконуватися лише перевірка net session'
+    );
+  } finally {
+    setExecSyncHandler(null);
+  }
+
+  // advancedWindowsClean з підміненою реалізацією команд
+  const commandsAdmin = [];
+  const originalEnv = {
+    WINDIR: process.env.WINDIR,
+    SystemDrive: process.env.SystemDrive,
+    LOCALAPPDATA: process.env.LOCALAPPDATA
+  };
+  process.env.WINDIR = process.env.WINDIR || 'C:/Windows';
+  process.env.SystemDrive = process.env.SystemDrive || 'C:';
+  process.env.LOCALAPPDATA = process.env.LOCALAPPDATA || 'C:/Users/Test/AppData/Local';
+  const originalRmSync = fs.rmSync;
+  try {
+    fs.rmSync = (target) => {
+      commandsAdmin.push(`rm:${target}`);
+    };
+    setExecSyncHandler((cmd, options = {}) => {
+      commandsAdmin.push(cmd);
+      if (cmd.startsWith('net session')) {
+        return '';
+      }
+      if (cmd.startsWith('wevtutil.exe el')) {
+        return options.encoding === 'utf8' ? 'Application\nSystem\n' : Buffer.from('Application\n');
+      }
+      return '';
+    });
+    advancedWindowsClean();
+    assert.ok(
+      commandsAdmin.some((cmd) => cmd.includes('Clear-RecycleBin')),
+      'Повинна запускатися команда очищення кошика'
+    );
+    assert.ok(
+      commandsAdmin.some((cmd) => cmd.startsWith('wevtutil.exe cl')),
+      'Очікується очищення журналів подій'
+    );
+    assert.ok(
+      commandsAdmin.some((cmd) => typeof cmd === 'string' && cmd.startsWith('rm:')),
+      'Очікується спроба видалити каталог SoftwareDistribution'
+    );
+  } finally {
+    fs.rmSync = originalRmSync;
+    process.env.WINDIR = originalEnv.WINDIR;
+    process.env.SystemDrive = originalEnv.SystemDrive;
+    process.env.LOCALAPPDATA = originalEnv.LOCALAPPDATA;
+    setExecSyncHandler(null);
+  }
+
+  // Контроль мінімальної версії Node.js
+  const originalExit = process.exit;
+  const originalError = console.error;
+  const exitCodesVersion = [];
+  const errorMessages = [];
+  try {
+    process.exit = (code) => {
+      exitCodesVersion.push(code);
+    };
+    console.error = (...args) => {
+      errorMessages.push(args.join(' '));
+    };
+    setNodeVersionOverride(10);
+    runCli();
+    assert.ok(
+      exitCodesVersion.includes(1),
+      'При застарілій версії Node.js має відбуватися вихід із кодом 1'
+    );
+    assert.ok(
+      errorMessages.some((msg) => msg.includes('Потрібна Node.js >= ')),
+      'Повідомлення про несумісну версію має виводитися у stderr'
+    );
+  } finally {
+    setNodeVersionOverride(null);
+    console.error = originalError;
+    process.exit = originalExit;
+  }
+
+  // Режим --help у CLI
+  resetOptions();
+  parseArgs(['--help']);
+  const exitCodesHelp = [];
+  const originalExitHelp = process.exit;
+  const originalLog = console.log;
+  try {
+    process.exit = (code) => {
+      exitCodesHelp.push(code);
+    };
+    console.log = () => {};
+    setMainOverride(true);
+    setNodeVersionOverride(CURRENT_NODE_MAJOR);
+    setParsedOkOverride(true);
+    runCli();
+    assert.ok(exitCodesHelp.includes(0), 'У режимі допомоги процес має завершуватися з кодом 0');
+  } finally {
+    setParsedOkOverride(null);
+    setMainOverride(null);
+    setNodeVersionOverride(null);
+    process.exit = originalExitHelp;
+    console.log = originalLog;
+  }
+  resetOptions();
+
+  // Помилка розбору аргументів у CLI
+  const exitCodesError = [];
+  const originalExitError = process.exit;
+  try {
+    process.exit = (code) => {
+      exitCodesError.push(code);
+    };
+    setMainOverride(true);
+    setNodeVersionOverride(CURRENT_NODE_MAJOR);
+    setParsedOkOverride(false);
+    runCli();
+    assert.ok(exitCodesError.includes(1), 'При помилці розбору CLI має завершуватися з кодом 1');
+  } finally {
+    setParsedOkOverride(null);
+    setMainOverride(null);
+    setNodeVersionOverride(null);
+    process.exit = originalExitError;
+  }
+
+  // Обробка помилки виконання clean у CLI
+  const exitCodesRun = [];
+  const originalExitRun = process.exit;
+  const originalErrorRun = console.error;
+  const cliErrors = [];
+  try {
+    process.exit = (code) => {
+      exitCodesRun.push(code);
+    };
+    console.error = (...args) => {
+      cliErrors.push(args.join(' '));
+    };
+    setMainOverride(true);
+    setNodeVersionOverride(CURRENT_NODE_MAJOR);
+    setParsedOkOverride(true);
+    setCleanOverride(() => Promise.reject(new Error('тестова помилка CLI')));
+    runCli();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.strictEqual(exitCodesRun.length, 0, 'Помилка clean не має завершувати процес');
+    assert.ok(
+      cliErrors.some((msg) => msg.includes('Помилка виконання скрипту')),
+      'Повідомлення про помилку clean має бути залоговано'
+    );
+  } finally {
+    setCleanOverride(null);
+    setParsedOkOverride(null);
+    setMainOverride(null);
+    setNodeVersionOverride(null);
+    console.error = originalErrorRun;
+    process.exit = originalExitRun;
+  }
 
   console.log('Усі тести пройшли');
 })();
