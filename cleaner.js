@@ -11,6 +11,11 @@ let nodeVersionOverride = null;
 let mainOverride = null;
 let parsedOkOverride = null;
 
+/**
+ * Дозволяє підмінити execSync для тестів або спеціальних сценаріїв, не змінюючи
+ * глобальний модуль child_process. Якщо передати некоректне значення, буде
+ * використано стандартну реалізацію Node.js.
+ */
 function setExecSyncHandler(handler) {
   execSyncHandler = typeof handler === 'function' ? handler : childProcess.execSync;
 }
@@ -23,6 +28,10 @@ function currentPlatform() {
   return platformOverride || process.platform;
 }
 
+/**
+ * Функція для маніпуляції перевіркою версії Node.js під час тестування. Дозволяє
+ * симулювати старі або нові версії без повторного запуску середовища.
+ */
 function setNodeVersionOverride(major) {
   if (typeof major === 'number' && Number.isFinite(major)) {
     nodeVersionOverride = major;
@@ -38,6 +47,10 @@ function currentNodeMajor() {
   return parseInt(process.versions.node.split('.')[0], 10);
 }
 
+/**
+ * Додатковий перемикач для юніт-тестів: дозволяє примусово вказати, чи вважається
+ * поточний модуль головним виконуваним файлом.
+ */
 function setMainOverride(value) {
   mainOverride = typeof value === 'boolean' ? value : null;
 }
@@ -54,12 +67,10 @@ function setParsedOkOverride(value) {
 }
 const YAML = require('yaml');
 
-// мінімально сумісна версія Node.js
-// minimum supported Node.js version
+// Мінімально підтримувана версія Node.js
 const MIN_NODE_MAJOR = 16;
 
-// змінні керування
-// control variables
+// Змінні стану для збереження параметрів, переданих користувачем або конфігами
 let dryRun = false;
 let parallel = false;
 let deepClean = false;
@@ -73,7 +84,6 @@ let interactivePreview = false;
 let previewPromptHandler = null;
 let previewInterface = null;
 let helpRequested = false;
-// additional directories to clean
 
 function log(msg) {
   console.log(msg);
@@ -137,6 +147,12 @@ function closePreviewInterface() {
   }
 }
 
+/**
+ * Питає підтвердження для режиму попереднього перегляду. Якщо зареєстровано
+ * кастомний обробник (потрібно для тестів або GUI), він отримає повідомлення й
+ * повинен повернути булевий результат. Інакше показує інтерактивний prompt у
+ * терміналі та враховує відсутність TTY.
+ */
 async function askForPreviewConfirmation(message) {
   if (previewPromptHandler) {
     return Boolean(await previewPromptHandler(message));
@@ -814,6 +830,7 @@ function pushIfExists(list, dir) {
   }
 }
 
+// Перевіряє, чи запущено процес із правами адміністратора у Windows.
 function isAdmin() {
   try {
     execSyncHandler('net session >nul 2>&1');
@@ -823,6 +840,11 @@ function isAdmin() {
   }
 }
 
+/**
+ * Виконує системні PowerShell/Win32 команди для додаткового очищення (корзина,
+ * компонентні сховища тощо). Потребує адміністративних прав, інакше команда не
+ * виконується.
+ */
 function advancedWindowsClean() {
   if (!isAdmin()) {
     console.error('Для глибокого очищення потрібні адмінські права');
