@@ -136,13 +136,25 @@ const CURRENT_NODE_MAJOR = parseInt(process.versions.node.split('.')[0], 10);
   assert.ok(parseArgs(['--validate']), 'Прапорець --validate має зчитуватися без помилок');
   const optsValidateFlag = getOptions();
   assert.ok(optsValidateFlag.validateOnly, '--validate має перемикати режим валідації');
-  assert.ok(!optsValidateFlag.configSourceProvided, 'Без конфігів не має встановлюватися прапорець джерела');
+  assert.ok(
+    !optsValidateFlag.configSourceProvided,
+    'Без конфігів не має встановлюватися прапорець джерела'
+  );
 
   resetOptions();
-  assert.ok(parseArgs(['--config-schema']), 'Прапорець --config-schema має зчитуватися без помилок');
+  assert.ok(
+    parseArgs(['--config-schema']),
+    'Прапорець --config-schema має зчитуватися без помилок'
+  );
   const optsSchemaFlag = getOptions();
-  assert.ok(optsSchemaFlag.schemaRequested, '--config-schema має позначати необхідність виводу схеми');
-  assert.ok(!optsSchemaFlag.validateOnly, '--config-schema не повинен вмикати валідацію автоматично');
+  assert.ok(
+    optsSchemaFlag.schemaRequested,
+    '--config-schema має позначати необхідність виводу схеми'
+  );
+  assert.ok(
+    !optsSchemaFlag.validateOnly,
+    '--config-schema не повинен вмикати валідацію автоматично'
+  );
 
   // Тест clean у режимі dry-run
   resetOptions();
