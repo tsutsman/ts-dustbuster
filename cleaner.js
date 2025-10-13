@@ -84,6 +84,9 @@ let interactivePreview = false;
 let previewPromptHandler = null;
 let previewInterface = null;
 let helpRequested = false;
+let validateConfigOnly = false;
+let schemaRequested = false;
+let configSourceProvided = false;
 
 function log(msg) {
   console.log(msg);
@@ -484,6 +487,57 @@ const ALLOWED_CONFIG_KEYS = new Set([
   'presets'
 ]);
 
+function buildConfigSchema() {
+  const stringOrStringArray = {
+    oneOf: [
+      { type: 'string' },
+      { type: 'array', items: { type: 'string' } }
+    ]
+  };
+
+  return {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    title: 'ts-dustbuster configuration',
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      dirs: {
+        ...stringOrStringArray,
+        description: 'Перелік директорій для очищення (рядок або масив рядків).'
+      },
+      exclude: {
+        ...stringOrStringArray,
+        description: 'Шляхи, які потрібно виключити з очищення.'
+      },
+      maxAge: {
+        oneOf: [
+          { type: 'number', minimum: 0 },
+          { type: 'string', pattern: '^[0-9]+[smhdwSMHDW]?$' }
+        ],
+        description:
+          'Мінімальний вік файлів для видалення у годинах або у форматі 30m/12h/5d.'
+      },
+      summary: { type: 'boolean' },
+      parallel: { type: 'boolean' },
+      dryRun: { type: 'boolean' },
+      deep: { type: 'boolean' },
+      logFile: { type: 'string' },
+      concurrency: {
+        oneOf: [
+          { type: 'integer', minimum: 1 },
+          { type: 'null' }
+        ],
+        description: 'Обмеження кількості паралельних завдань або null для значення за замовчуванням.'
+      },
+      preview: { type: 'boolean' },
+      presets: {
+        ...stringOrStringArray,
+        description: 'Підключення інших конфігурацій (рядок або масив рядків).'
+      }
+    }
+  };
+}
+
 function extractConfig(config, baseDir, source) {
   const result = createEmptyPresetData();
 
@@ -814,6 +868,8 @@ function printHelp() {
       '  --exclude <шлях>      Виключити каталог з очищення.',
       '  --config <шлях>       Застосувати конфігурацію (файл або каталог).',
       '  --preset <назва>      Завантажити пресет за назвою або шляхом.',
+      '  --validate            Перевірити конфігурації та пресети без очищення.',
+      '  --config-schema       Вивести JSON Schema для конфігурацій.',
       '  --max-age <тривалість>Видаляти лише елементи старші за вказаний час.',
       '  --summary             Показати підсумкову статистику.',
       '  --preview             Інтерактивно підтверджувати очищення.',
@@ -922,6 +978,10 @@ function parseArgs(args = process.argv.slice(2)) {
       summary = true;
     } else if (a === '--preview') {
       interactivePreview = true;
+    } else if (a === '--validate') {
+      validateConfigOnly = true;
+    } else if (a === '--config-schema') {
+      schemaRequested = true;
     } else if (a === '--max-age') {
       if (!args[i + 1]) {
         console.error('Прапорець --max-age вимагає значення тривалості.');
@@ -942,6 +1002,8 @@ function parseArgs(args = process.argv.slice(2)) {
         ok = false;
       } else if (!handleConfigArgument(args[++i])) {
         ok = false;
+      } else {
+        configSourceProvided = true;
       }
     } else if (a === '--preset') {
       if (!args[i + 1]) {
@@ -949,6 +1011,8 @@ function parseArgs(args = process.argv.slice(2)) {
         ok = false;
       } else if (!handlePresetArgument(args[++i])) {
         ok = false;
+      } else {
+        configSourceProvided = true;
       }
     }
   }
@@ -1222,6 +1286,23 @@ function runCli() {
     return;
   }
 
+  if (schemaRequested) {
+    console.log(JSON.stringify(buildConfigSchema(), null, 2));
+    process.exit(0);
+    return;
+  }
+
+  if (validateConfigOnly) {
+    if (!configSourceProvided) {
+      console.error('Прапорець --validate вимагає принаймні один --config або --preset.');
+      process.exit(1);
+      return;
+    }
+    console.log('Конфігурації успішно пройшли перевірку.');
+    process.exit(0);
+    return;
+  }
+
   Promise.resolve(cleanInvoker()).catch((err) => {
     console.error('Помилка виконання скрипту:', err);
   });
@@ -1241,7 +1322,10 @@ function getOptions() {
     exclusions: [...exclusions],
     concurrency,
     interactivePreview,
-    helpRequested
+    helpRequested,
+    validateOnly: validateConfigOnly,
+    schemaRequested,
+    configSourceProvided
   };
 }
 
@@ -1259,6 +1343,9 @@ function resetOptions() {
   previewPromptHandler = null;
   closePreviewInterface();
   helpRequested = false;
+  validateConfigOnly = false;
+  schemaRequested = false;
+  configSourceProvided = false;
 }
 
 // експортуємо clean для повторного використання у GUI
