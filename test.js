@@ -131,6 +131,19 @@ const CURRENT_NODE_MAJOR = parseInt(process.versions.node.split('.')[0], 10);
   assert.ok(optsFromConfig.parallel, 'parallel має вмикатися, якщо concurrency > 1 у конфігурації');
   fs.unlinkSync(cfgPath);
 
+  // Тест прапорців --validate та --config-schema
+  resetOptions();
+  assert.ok(parseArgs(['--validate']), 'Прапорець --validate має зчитуватися без помилок');
+  const optsValidateFlag = getOptions();
+  assert.ok(optsValidateFlag.validateOnly, '--validate має перемикати режим валідації');
+  assert.ok(!optsValidateFlag.configSourceProvided, 'Без конфігів не має встановлюватися прапорець джерела');
+
+  resetOptions();
+  assert.ok(parseArgs(['--config-schema']), 'Прапорець --config-schema має зчитуватися без помилок');
+  const optsSchemaFlag = getOptions();
+  assert.ok(optsSchemaFlag.schemaRequested, '--config-schema має позначати необхідність виводу схеми');
+  assert.ok(!optsSchemaFlag.validateOnly, '--config-schema не повинен вмикати валідацію автоматично');
+
   // Тест clean у режимі dry-run
   resetOptions();
   const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'db-test-'));
@@ -850,6 +863,121 @@ const CURRENT_NODE_MAJOR = parseInt(process.versions.node.split('.')[0], 10);
     console.error = originalError;
     process.exit = originalExit;
   }
+
+  // Режим --validate з коректною конфігурацією
+  resetOptions();
+  const validateOkConfig = path.join(os.tmpdir(), 'db-validate-ok.json');
+  fs.writeFileSync(validateOkConfig, JSON.stringify({ dirs: ['./tmp'], summary: true }));
+  assert.ok(
+    parseArgs(['--config', validateOkConfig, '--validate']),
+    '--validate з переданою конфігурацією має зчитуватися без помилок'
+  );
+  const exitCodesValidateOk = [];
+  const logMessagesValidateOk = [];
+  const errorMessagesValidateOk = [];
+  const originalExitValidateOk = process.exit;
+  const originalLogValidateOk = console.log;
+  const originalErrorValidateOk = console.error;
+  try {
+    process.exit = (code) => {
+      exitCodesValidateOk.push(code);
+    };
+    console.log = (...args) => {
+      logMessagesValidateOk.push(args.join(' '));
+    };
+    console.error = (...args) => {
+      errorMessagesValidateOk.push(args.join(' '));
+    };
+    setMainOverride(true);
+    setNodeVersionOverride(CURRENT_NODE_MAJOR);
+    setParsedOkOverride(true);
+    runCli();
+  } finally {
+    setParsedOkOverride(null);
+    setMainOverride(null);
+    setNodeVersionOverride(null);
+    console.error = originalErrorValidateOk;
+    console.log = originalLogValidateOk;
+    process.exit = originalExitValidateOk;
+  }
+  assert.ok(exitCodesValidateOk.includes(0), 'CLI у режимі валідації має завершуватися з кодом 0');
+  assert.ok(
+    logMessagesValidateOk.some((msg) => msg.includes('Конфігурації успішно пройшли перевірку.')),
+    'CLI має повідомляти про успішну перевірку конфігів'
+  );
+  assert.strictEqual(
+    errorMessagesValidateOk.length,
+    0,
+    'Успішна валідація не повинна виводити помилки у stderr'
+  );
+  resetOptions();
+  fs.unlinkSync(validateOkConfig);
+
+  // Режим --validate без переданих конфігів
+  resetOptions();
+  assert.ok(parseArgs(['--validate']), '--validate без конфігів має розпізнаватися');
+  const exitCodesValidateMissing = [];
+  const errorMessagesValidateMissing = [];
+  const originalExitValidateMissing = process.exit;
+  const originalErrorValidateMissing = console.error;
+  const originalLogValidateMissing = console.log;
+  try {
+    process.exit = (code) => {
+      exitCodesValidateMissing.push(code);
+    };
+    console.error = (...args) => {
+      errorMessagesValidateMissing.push(args.join(' '));
+    };
+    console.log = () => {};
+    setMainOverride(true);
+    setNodeVersionOverride(CURRENT_NODE_MAJOR);
+    setParsedOkOverride(true);
+    runCli();
+  } finally {
+    setParsedOkOverride(null);
+    setMainOverride(null);
+    setNodeVersionOverride(null);
+    console.error = originalErrorValidateMissing;
+    console.log = originalLogValidateMissing;
+    process.exit = originalExitValidateMissing;
+  }
+  assert.ok(exitCodesValidateMissing.includes(1), 'CLI має завершуватися з кодом 1 без конфігів');
+  assert.ok(
+    errorMessagesValidateMissing.some((msg) => msg.includes('Прапорець --validate вимагає')),
+    'CLI має попереджати про відсутність конфігів'
+  );
+  resetOptions();
+
+  // Режим --config-schema
+  resetOptions();
+  assert.ok(parseArgs(['--config-schema']), '--config-schema має зчитуватися без помилок');
+  const exitCodesSchemaCli = [];
+  const schemaOutputsCli = [];
+  const originalExitSchemaCli = process.exit;
+  const originalLogSchemaCli = console.log;
+  try {
+    process.exit = (code) => {
+      exitCodesSchemaCli.push(code);
+    };
+    console.log = (...args) => {
+      schemaOutputsCli.push(args.join(' '));
+    };
+    setMainOverride(true);
+    setNodeVersionOverride(CURRENT_NODE_MAJOR);
+    setParsedOkOverride(true);
+    runCli();
+  } finally {
+    setParsedOkOverride(null);
+    setMainOverride(null);
+    setNodeVersionOverride(null);
+    console.log = originalLogSchemaCli;
+    process.exit = originalExitSchemaCli;
+  }
+  const schemaCombined = schemaOutputsCli.join('\n');
+  assert.ok(exitCodesSchemaCli.includes(0), 'CLI з --config-schema має завершуватися з кодом 0');
+  assert.ok(schemaCombined.includes('"$schema"'), 'JSON Schema має містити посилання на стандарт');
+  assert.ok(schemaCombined.includes('"properties"'), 'JSON Schema має містити опис полів');
+  resetOptions();
 
   // Режим --help у CLI
   resetOptions();
