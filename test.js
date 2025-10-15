@@ -20,6 +20,7 @@ const {
   setCleanOverride,
   runWithLimit
 } = require('./cleaner');
+const { handleConfigArgument } = require('./src/config');
 
 const CURRENT_NODE_MAJOR = parseInt(process.versions.node.split('.')[0], 10);
 
@@ -130,6 +131,43 @@ const CURRENT_NODE_MAJOR = parseInt(process.versions.node.split('.')[0], 10);
   assert.strictEqual(optsFromConfig.concurrency, 2, 'concurrency має зчитуватися з конфігурації');
   assert.ok(optsFromConfig.parallel, 'parallel має вмикатися, якщо concurrency > 1 у конфігурації');
   fs.unlinkSync(cfgPath);
+
+  // Тест кешування пресетів конфігурації
+  resetOptions();
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-cache-'));
+  const presetPath = path.join(cacheDir, 'preset.json');
+  fs.writeFileSync(presetPath, JSON.stringify({ dirs: ['./tmp'] }));
+  const mainConfigPath = path.join(cacheDir, 'main.json');
+  fs.writeFileSync(mainConfigPath, JSON.stringify({ presets: [presetPath] }));
+  const secondaryConfigPath = path.join(cacheDir, 'secondary.json');
+  fs.writeFileSync(secondaryConfigPath, JSON.stringify({ presets: [presetPath] }));
+  let presetReadCount = 0;
+  const originalReadFileSync = fs.readFileSync;
+  const normalizedPreset = path.resolve(presetPath);
+  fs.readFileSync = (file, ...rest) => {
+    if (path.resolve(file) === normalizedPreset) {
+      presetReadCount += 1;
+    }
+    return originalReadFileSync(file, ...rest);
+  };
+  try {
+    assert.ok(
+      handleConfigArgument(mainConfigPath),
+      'Основний конфіг має застосовуватися без помилок'
+    );
+    assert.ok(
+      handleConfigArgument(secondaryConfigPath),
+      'Повторне використання пресету має застосовуватися без помилок'
+    );
+  } finally {
+    fs.readFileSync = originalReadFileSync;
+    fs.rmSync(cacheDir, { recursive: true, force: true });
+  }
+  assert.strictEqual(
+    presetReadCount,
+    1,
+    'Пресет має зчитуватися з диска лише один раз завдяки кешу'
+  );
 
   // Тест прапорців --validate та --config-schema
   resetOptions();

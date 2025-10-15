@@ -5,6 +5,7 @@ const { state } = require('./state');
 const { normalizePath } = require('./utils/path');
 
 const CONFIG_EXTENSIONS = new Set(['.json', '.yaml', '.yml']);
+const configCache = new Map();
 const ALLOWED_CONFIG_KEYS = new Set([
   'dirs',
   'exclude',
@@ -371,73 +372,108 @@ function resolvePreset(reference, baseDir) {
   throw new Error(`${originPrefix(baseDir)}Не вдалося знайти пресет "${reference}".`);
 }
 
+function getCachedConfig(normalized, mtimeMs) {
+  const cached = configCache.get(normalized);
+  if (cached && cached.mtimeMs === mtimeMs) {
+    return cached.data;
+  }
+  return null;
+}
+
 function parseConfigFile(filePath, visited = new Set()) {
   const normalized = normalizePath(filePath);
   if (visited.has(normalized)) {
     throw new Error(`${originPrefix(normalized)}Виявлено циклічне підключення пресетів.`);
   }
+
+  let stat;
+  try {
+    stat = fs.statSync(normalized);
+  } catch (err) {
+    throw new Error(
+      `${originPrefix(normalized)}Не вдалося отримати метадані: ${extractErrorMessage(err)}`
+    );
+  }
+
+  if (!stat.isFile()) {
+    throw new Error(
+      `${originPrefix(normalized)}Очікувався файл конфігурації, але отримано інший тип.`
+    );
+  }
+
+  const cached = getCachedConfig(normalized, stat.mtimeMs);
+  if (cached) {
+    return cached;
+  }
+
   visited.add(normalized);
 
-  let raw;
   try {
-    raw = fs.readFileSync(normalized, 'utf8');
-  } catch (err) {
-    throw new Error(
-      `${originPrefix(normalized)}Не вдалося прочитати файл: ${extractErrorMessage(err)}`
-    );
-  }
+    let raw;
+    try {
+      raw = fs.readFileSync(normalized, 'utf8');
+    } catch (err) {
+      throw new Error(
+        `${originPrefix(normalized)}Не вдалося прочитати файл: ${extractErrorMessage(err)}`
+      );
+    }
 
-  const ext = path.extname(normalized).toLowerCase();
-  let parsed;
-  try {
-    if (ext === '.json') {
-      parsed = raw.trim() ? JSON.parse(raw) : {};
-    } else if (ext === '.yaml' || ext === '.yml') {
-      parsed = raw.trim() ? YAML.parse(raw) : {};
-    } else {
-      try {
+    const ext = path.extname(normalized).toLowerCase();
+    let parsed;
+    try {
+      if (ext === '.json') {
         parsed = raw.trim() ? JSON.parse(raw) : {};
-      } catch (jsonErr) {
+      } else if (ext === '.yaml' || ext === '.yml') {
+        parsed = raw.trim() ? YAML.parse(raw) : {};
+      } else {
         try {
-          parsed = raw.trim() ? YAML.parse(raw) : {};
-        } catch (yamlErr) {
-          throw new Error(
-            `${originPrefix(normalized)}Не вдалося розпарсити конфіг: ${yamlErr.message || jsonErr.message}`
-          );
+          parsed = raw.trim() ? JSON.parse(raw) : {};
+        } catch (jsonErr) {
+          try {
+            parsed = raw.trim() ? YAML.parse(raw) : {};
+          } catch (yamlErr) {
+            throw new Error(
+              `${originPrefix(normalized)}Не вдалося розпарсити конфіг: ${
+                yamlErr.message || jsonErr.message
+              }`
+            );
+          }
         }
       }
+    } catch (err) {
+      throw new Error(
+        `${originPrefix(normalized)}Не вдалося розпарсити конфіг: ${extractErrorMessage(err)}`
+      );
     }
-  } catch (err) {
-    throw new Error(
-      `${originPrefix(normalized)}Не вдалося розпарсити конфіг: ${extractErrorMessage(err)}`
-    );
-  }
 
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(
-      `${originPrefix(normalized)}Конфігурація має бути об'єктом (мапою ключ-значення).`
-    );
-  }
-
-  const baseDir = path.dirname(normalized);
-  let accumulated = createEmptyPresetData();
-
-  if (parsed.presets !== undefined) {
-    const presets = ensureArrayOfStrings(parsed.presets, 'presets', normalized);
-    for (const presetRef of presets) {
-      const presetPath = resolvePreset(presetRef, baseDir);
-      const nested = parseConfigFile(presetPath, visited);
-      accumulated = mergePresetData(accumulated, nested);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error(
+        `${originPrefix(normalized)}Конфігурація має бути об'єктом (мапою ключ-значення).`
+      );
     }
+
+    const baseDir = path.dirname(normalized);
+    let accumulated = createEmptyPresetData();
+
+    if (parsed.presets !== undefined) {
+      const presets = ensureArrayOfStrings(parsed.presets, 'presets', normalized);
+      for (const presetRef of presets) {
+        const presetPath = resolvePreset(presetRef, baseDir);
+        const nested = parseConfigFile(presetPath, visited);
+        accumulated = mergePresetData(accumulated, nested);
+      }
+    }
+
+    const rest = { ...parsed };
+    delete rest.presets;
+    const current = extractConfig(rest, baseDir, normalized);
+    accumulated = mergePresetData(accumulated, current);
+
+    configCache.set(normalized, { mtimeMs: stat.mtimeMs, data: accumulated });
+    return accumulated;
+  } finally {
+    visited.delete(normalized);
   }
-
-  const rest = { ...parsed };
-  delete rest.presets;
-  const current = extractConfig(rest, baseDir, normalized);
-  accumulated = mergePresetData(accumulated, current);
-
-  visited.delete(normalized);
-  return accumulated;
 }
 
 function applyConfigData(data, source) {
