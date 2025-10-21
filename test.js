@@ -584,6 +584,7 @@ const CURRENT_NODE_MAJOR = parseInt(process.versions.node.split('.')[0], 10);
     'Конкурентний режим має вмикатися без помилок'
   );
   const parallelMetrics = await clean({ targets: [parallelDirA, parallelDirB, parallelDirC] });
+  const { targetSummaries } = parallelMetrics;
   assert.ok(
     parallelMetrics.files >= 4,
     'Очікується принаймні чотири видалені файли з трьох каталогів'
@@ -591,10 +592,24 @@ const CURRENT_NODE_MAJOR = parseInt(process.versions.node.split('.')[0], 10);
   assert.ok(parallelMetrics.dirs >= 1, 'Повинна бути врахована принаймні одна піддиректорія');
   assert.strictEqual(parallelMetrics.errors, 0, 'Очищення має проходити без помилок');
   assert.ok(parallelMetrics.bytes >= 2048, 'Звільнений обсяг має враховувати великий файл');
+  assert.ok(
+    typeof parallelMetrics.durationMs === 'number' && parallelMetrics.durationMs >= 0,
+    'Підсумкові метрики мають містити тривалість виконання'
+  );
+  assert.ok(
+    Array.isArray(targetSummaries) && targetSummaries.length === 3,
+    'Підсумок має містити інформацію для кожної цілі'
+  );
+  const heavyEntry = targetSummaries.find((entry) => entry.path === path.resolve(parallelDirA));
+  assert.ok(heavyEntry, 'У підсумку має бути запис для каталогу з великим файлом');
+  assert.ok(heavyEntry.bytes >= 2048, 'Запис каталогу має містити правильний обсяг');
+  assert.ok(
+    typeof heavyEntry.durationMs === 'number' && heavyEntry.durationMs >= 0,
+    'Кожний запис каталогу має містити тривалість'
+  );
   fs.rmSync(parallelDirA, { recursive: true, force: true });
   fs.rmSync(parallelDirB, { recursive: true, force: true });
   fs.rmSync(parallelDirC, { recursive: true, force: true });
-
   await assert.rejects(
     runWithLimit([() => Promise.resolve('ok'), () => Promise.reject(new Error('boom'))], 2),
     /boom/,
@@ -609,6 +624,43 @@ const CURRENT_NODE_MAJOR = parseInt(process.versions.node.split('.')[0], 10);
   assert.strictEqual(emptyMetrics.files, 0, 'При повному виключенні не має бути видалених файлів');
   assert.strictEqual(emptyMetrics.dirs, 0, 'Порожній список не має містити директорій');
   fs.rmSync(excludedDir, { recursive: true, force: true });
+
+  // Попередження про недостатні права доступу в підсумку
+  resetOptions();
+  const deniedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'db-denied-'));
+  const deniedFile = path.join(deniedDir, 'denied.txt');
+  fs.writeFileSync(deniedFile, 'sensitive');
+  assert.ok(parseArgs(['--summary']), 'Прапорець summary має застосовуватися без помилок');
+  const originalRmDenied = fs.promises.rm;
+  const summaryLogs = [];
+  const originalConsoleLog = console.log;
+  try {
+    fs.promises.rm = async (target, options) => {
+      if (path.resolve(target) === path.resolve(deniedFile)) {
+        const err = new Error('недостатньо прав');
+        err.code = 'EACCES';
+        throw err;
+      }
+      return originalRmDenied(target, options);
+    };
+    console.log = (msg) => {
+      summaryLogs.push(msg);
+    };
+    const deniedMetrics = await clean({ targets: [deniedDir] });
+    assert.ok(
+      deniedMetrics.permissionDenied.some((entry) => entry === path.resolve(deniedFile)),
+      'Шлях із недостатніми правами має бути зафіксований у метриках'
+    );
+    assert.ok(
+      summaryLogs.some((msg) => msg.includes('[warning] Пропущено через права доступу')),
+      'Підсумок має містити попередження про права доступу'
+    );
+  } finally {
+    console.log = originalConsoleLog;
+    fs.promises.rm = originalRmDenied;
+    resetOptions();
+    fs.rmSync(deniedDir, { recursive: true, force: true });
+  }
 
   // macOS гілка з імітованим домашнім каталогом
   resetOptions();

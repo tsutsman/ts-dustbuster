@@ -7,6 +7,7 @@ const { log } = require('./logging');
 const { normalizePath, isWithin } = require('./utils/path');
 
 const MIN_NODE_MAJOR = 16;
+const PERMISSION_ERROR_CODES = new Set(['EACCES', 'EPERM']);
 
 function currentPlatform() {
   return state.platformOverride || process.platform;
@@ -54,6 +55,20 @@ function closePreviewInterface() {
   }
 }
 
+function isPermissionError(err) {
+  return Boolean(err && typeof err === 'object' && PERMISSION_ERROR_CODES.has(err.code));
+}
+
+function recordPermissionDenied(metrics, targetPath) {
+  if (!metrics || !targetPath) {
+    return;
+  }
+  const normalized = normalizePath(targetPath);
+  if (!metrics.permissionDenied.includes(normalized)) {
+    metrics.permissionDenied.push(normalized);
+  }
+}
+
 async function askForPreviewConfirmation(message) {
   if (state.previewPromptHandler) {
     return Boolean(await state.previewPromptHandler(message));
@@ -87,9 +102,19 @@ async function askForPreviewConfirmation(message) {
   });
 }
 
-async function inspectPath(fullPath, stat) {
+async function inspectPath(fullPath, stat, metrics) {
   let info = { files: 0, dirs: 0, bytes: 0 };
-  const currentStat = stat || (await fs.promises.lstat(fullPath));
+  let currentStat = stat;
+  if (!currentStat) {
+    try {
+      currentStat = await fs.promises.lstat(fullPath);
+    } catch (err) {
+      if (isPermissionError(err)) {
+        recordPermissionDenied(metrics, fullPath);
+      }
+      throw err;
+    }
+  }
   if (currentStat.isDirectory() && !currentStat.isSymbolicLink()) {
     info.dirs += 1;
     try {
@@ -98,15 +123,21 @@ async function inspectPath(fullPath, stat) {
         const child = path.join(fullPath, entry);
         try {
           const childStat = await fs.promises.lstat(child);
-          const nested = await inspectPath(child, childStat);
+          const nested = await inspectPath(child, childStat, metrics);
           info.files += nested.files;
           info.dirs += nested.dirs;
           info.bytes += nested.bytes;
         } catch (err) {
+          if (isPermissionError(err)) {
+            recordPermissionDenied(metrics, child);
+          }
           console.error(`Не вдалося перевірити ${child}:`, err.message);
         }
       }
     } catch (err) {
+      if (isPermissionError(err)) {
+        recordPermissionDenied(metrics, fullPath);
+      }
       console.error(`Не вдалося прочитати ${fullPath}:`, err.message);
     }
   } else {
@@ -131,7 +162,7 @@ function formatBytes(bytes) {
 }
 
 function createMetrics() {
-  return { files: 0, dirs: 0, bytes: 0, skipped: 0, errors: 0 };
+  return { files: 0, dirs: 0, bytes: 0, skipped: 0, errors: 0, permissionDenied: [] };
 }
 
 function mergeMetrics(target, addition) {
@@ -140,6 +171,13 @@ function mergeMetrics(target, addition) {
   target.bytes += addition.bytes;
   target.skipped += addition.skipped;
   target.errors += addition.errors;
+  if (Array.isArray(addition.permissionDenied)) {
+    for (const entry of addition.permissionDenied) {
+      if (!target.permissionDenied.includes(entry)) {
+        target.permissionDenied.push(entry);
+      }
+    }
+  }
   return target;
 }
 
@@ -166,7 +204,7 @@ async function filterTargetsByPreview(targets) {
 
       let info;
       try {
-        info = await inspectPath(dir, stat);
+        info = await inspectPath(dir, stat, null);
       } catch (err) {
         console.error(`Не вдалося зібрати дані для попереднього перегляду ${dir}:`, err.message);
         continue;
@@ -248,6 +286,9 @@ async function removeDirContents(dir, metrics = createMetrics()) {
       } catch (err) {
         console.error(`Не вдалося отримати інформацію про ${fullPath}:`, err.message);
         metrics.errors += 1;
+        if (isPermissionError(err)) {
+          recordPermissionDenied(metrics, fullPath);
+        }
         continue;
       }
       if (state.maxAgeMs !== null) {
@@ -260,10 +301,13 @@ async function removeDirContents(dir, metrics = createMetrics()) {
       }
       let info;
       try {
-        info = await inspectPath(fullPath, stat);
+        info = await inspectPath(fullPath, stat, metrics);
       } catch (err) {
         console.error(`Не вдалося оцінити ${fullPath}:`, err.message);
         metrics.errors += 1;
+        if (isPermissionError(err)) {
+          recordPermissionDenied(metrics, fullPath);
+        }
         continue;
       }
       if (state.dryRun) {
@@ -275,6 +319,9 @@ async function removeDirContents(dir, metrics = createMetrics()) {
         } catch (err) {
           console.error(`Не вдалося видалити ${fullPath}:`, err.message);
           metrics.errors += 1;
+          if (isPermissionError(err)) {
+            recordPermissionDenied(metrics, fullPath);
+          }
           continue;
         }
       }
@@ -286,6 +333,9 @@ async function removeDirContents(dir, metrics = createMetrics()) {
   } catch (err) {
     console.error(`Не вдалося очистити ${dir}:`, err.message);
     metrics.errors += 1;
+    if (isPermissionError(err)) {
+      recordPermissionDenied(metrics, dir);
+    }
   }
   return metrics;
 }
@@ -301,6 +351,7 @@ function concurrencyLimit(taskCount) {
 }
 
 async function clean({ targets: targetOverride } = {}) {
+  const runStarted = process.hrtime.bigint();
   const targets = [];
   if (Array.isArray(targetOverride) && targetOverride.length > 0) {
     targetOverride.forEach((dir) => pushIfExists(targets, dir));
@@ -400,29 +451,53 @@ async function clean({ targets: targetOverride } = {}) {
 
   if (filteredTargets.length === 0) {
     const total = createMetrics();
+    const durationMs = Number(process.hrtime.bigint() - runStarted) / 1e6;
+    total.durationMs = durationMs;
+    total.targetSummaries = [];
     if (state.summary) {
-      logSummary(total);
+      logSummary(total, { durationMs, targets: [] });
     }
     return total;
   }
 
-  const allMetrics = [];
-  const taskFactories = filteredTargets.map((dir) => () => removeDirContents(dir, createMetrics()));
+  const allResults = [];
+  const taskFactories = filteredTargets.map((dir) => async () => {
+    const started = process.hrtime.bigint();
+    const metrics = await removeDirContents(dir, createMetrics());
+    const finished = process.hrtime.bigint();
+    return {
+      dir,
+      metrics,
+      durationMs: Number(finished - started) / 1e6
+    };
+  });
   const limit = concurrencyLimit(taskFactories.length);
 
   if (limit <= 1) {
     for (const task of taskFactories) {
-      allMetrics.push(await task());
+      allResults.push(await task());
     }
   } else {
     const results = await runWithLimit(taskFactories, limit);
-    allMetrics.push(...results);
+    allResults.push(...results);
   }
 
-  const total = allMetrics.reduce((acc, item) => mergeMetrics(acc, item), createMetrics());
+  const total = allResults.reduce((acc, item) => mergeMetrics(acc, item.metrics), createMetrics());
+  const durationMs = Number(process.hrtime.bigint() - runStarted) / 1e6;
+  total.durationMs = durationMs;
+  total.targetSummaries = allResults.map((item) => ({
+    path: item.dir,
+    bytes: item.metrics.bytes,
+    files: item.metrics.files,
+    dirs: item.metrics.dirs,
+    skipped: item.metrics.skipped,
+    errors: item.metrics.errors,
+    durationMs: item.durationMs,
+    permissionDenied: [...item.metrics.permissionDenied]
+  }));
 
   if (state.summary) {
-    logSummary(total);
+    logSummary(total, { durationMs, targets: total.targetSummaries });
   }
 
   if (state.deepClean && currentPlatform() === 'win32') {
@@ -432,13 +507,58 @@ async function clean({ targets: targetOverride } = {}) {
   return total;
 }
 
-function logSummary(total) {
+function logSummary(total, details = {}) {
+  const { durationMs = 0, targets = [] } = details;
   log(
     `Підсумок: файлів ${total.files}, тек ${total.dirs}, пропущено ${total.skipped}, помилок ${total.errors}, звільнено ${formatBytes(total.bytes)}.`
   );
+  if (durationMs > 0) {
+    log(`Тривалість очищення: ${formatDuration(durationMs)}.`);
+  }
+  const heaviest = targets
+    .filter((item) => item.bytes > 0)
+    .sort((a, b) => b.bytes - a.bytes)
+    .slice(0, 3);
+  if (heaviest.length > 0) {
+    log('Найважчі каталоги:');
+    heaviest.forEach((item) => {
+      log(
+        `  • ${item.path} — ${formatBytes(item.bytes)}, файлів ${item.files}, тек ${item.dirs}, тривалість ${formatDuration(item.durationMs)}.`
+      );
+    });
+  }
+  if (Array.isArray(total.permissionDenied) && total.permissionDenied.length > 0) {
+    log(`[warning] Пропущено через права доступу: ${total.permissionDenied.length} шляхів.`);
+    const preview = total.permissionDenied.slice(0, 5);
+    preview.forEach((entry) => {
+      log(`[warning]   • ${entry}`);
+    });
+    if (total.permissionDenied.length > preview.length) {
+      log(`[warning]   … та ще ${total.permissionDenied.length - preview.length} шляхів.`);
+    }
+  }
   if (state.dryRun) {
     log('Режим dry-run: показані значення відображають потенційно звільнений простір.');
   }
+}
+
+function formatDuration(durationMs) {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) {
+    return '0 мс';
+  }
+  if (durationMs < 1000) {
+    return `${Math.round(durationMs)} мс`;
+  }
+  const seconds = durationMs / 1000;
+  if (seconds < 60) {
+    return `${seconds >= 10 ? Math.round(seconds) : seconds.toFixed(1)} с`;
+  }
+  const minutes = seconds / 60;
+  if (minutes < 60) {
+    return `${minutes >= 10 ? Math.round(minutes) : minutes.toFixed(1)} хв`;
+  }
+  const hours = minutes / 60;
+  return `${hours >= 10 ? Math.round(hours) : hours.toFixed(1)} год`;
 }
 
 function setCleanOverride(handler) {
