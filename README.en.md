@@ -45,7 +45,7 @@ node cleaner.js [options]
 ## CLI options
 
 - `--dry-run` — list what would be removed without deleting anything.
-- `--summary` — print the statistics summary.
+- `--summary` — print an extended summary with run duration, heaviest directories, and permission warnings.
 - `--parallel` — enable parallel cleanup; combine with `--concurrency <n>` to limit simultaneous operations.
 - `--max-age <duration>` — delete only files older than the specified age (examples: `12h`, `5d`).
 - `--dir <path>` — add a custom directory (repeatable flag).

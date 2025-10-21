@@ -32,7 +32,7 @@ This document explains how to control `cleaner.js` using JSON/YAML configuration
 - `dirs` — directories scheduled for cleanup. Both absolute and relative paths are supported.
 - `exclude` — paths that must never be deleted (recursive).
 - `maxAge` — minimum age of files/folders to remove. In this example, only items older than 7 days are deleted.
-- `summary` — prints a summary with counts of files, directories, and reclaimed space.
+- `summary` — prints an extended summary with counts, reclaimed space, run duration, heaviest directories, and permission warnings.
 - `parallel` and `concurrency` — enable parallel execution and limit the number of concurrent operations.
 - `logFile` — stores the cleanup log at a custom location.
 
