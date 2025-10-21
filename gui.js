@@ -3,6 +3,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { clean } = require('./cleaner');
+const { t } = require('./src/i18n');
 
 const indexPath = path.join(__dirname, 'public', 'index.html');
 const indexHtml = fs.readFileSync(indexPath);
@@ -30,5 +31,5 @@ const server = http.createServer(async (req, res) => {
 
 const port = 3000;
 server.listen(port, () => {
-  console.log(`GUI доступний на http://localhost:${port}`);
+  console.log(t('gui.listening', { port }));
 });

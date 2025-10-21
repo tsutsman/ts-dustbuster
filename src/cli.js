@@ -9,32 +9,12 @@ const {
   buildConfigSchema
 } = require('./config');
 const { MIN_NODE_MAJOR, currentNodeMajor, getCleanInvoker } = require('./core');
+const { t } = require('./i18n');
 
 let lastParseOk = true;
 
 function printHelp() {
-  console.log(
-    [
-      'Використання: dustbuster [опції]',
-      '',
-      'Опції:',
-      '  -h, --help            Показати цю довідку.',
-      '  --dry-run             Лише показати дії без фактичного видалення.',
-      '  --parallel            Виконувати очищення паралельно.',
-      '  --concurrency N       Обмежити кількість паралельних завдань.',
-      '  --dir <шлях>          Додати додатковий каталог до списку.',
-      '  --exclude <шлях>      Виключити каталог з очищення.',
-      '  --config <шлях>       Застосувати конфігурацію (файл або каталог).',
-      '  --preset <назва>      Завантажити пресет за назвою або шляхом.',
-      '  --validate            Перевірити конфігурації та пресети без очищення.',
-      '  --config-schema       Вивести JSON Schema для конфігурацій.',
-      '  --max-age <тривалість>Видаляти лише елементи старші за вказаний час.',
-      '  --summary             Показати підсумкову статистику.',
-      '  --preview             Інтерактивно підтверджувати очищення.',
-      '  --log <файл>          Зберігати журнал виконання у файл.',
-      '  --deep                Запускати додаткове очищення (Windows).'
-    ].join('\n')
-  );
+  console.log(t('cli.help'));
 }
 
 function parseArgs(args = process.argv.slice(2)) {
@@ -52,21 +32,21 @@ function parseArgs(args = process.argv.slice(2)) {
       state.helpRequested = true;
     } else if (a === '--log') {
       if (!args[i + 1]) {
-        console.error('Прапорець --log вимагає шлях до файлу.');
+        console.error(t('cli.errors.logRequiresPath'));
         ok = false;
       } else {
         state.logFile = args[++i];
       }
     } else if (a === '--dir') {
       if (!args[i + 1]) {
-        console.error('Прапорець --dir вимагає шлях до директорії.');
+        console.error(t('cli.errors.dirRequiresPath'));
         ok = false;
       } else {
         addExtraDir(args[++i]);
       }
     } else if (a === '--exclude') {
       if (!args[i + 1]) {
-        console.error('Прапорець --exclude вимагає шлях до директорії.');
+        console.error(t('cli.errors.excludeRequiresPath'));
         ok = false;
       } else {
         addExclusion(args[++i]);
@@ -81,21 +61,21 @@ function parseArgs(args = process.argv.slice(2)) {
       state.schemaRequested = true;
     } else if (a === '--max-age') {
       if (!args[i + 1]) {
-        console.error('Прапорець --max-age вимагає значення тривалості.');
+        console.error(t('cli.errors.maxAgeRequiresValue'));
         ok = false;
       } else if (!setMaxAge(args[++i])) {
         ok = false;
       }
     } else if (a === '--concurrency') {
       if (!args[i + 1]) {
-        console.error('Прапорець --concurrency вимагає числове значення.');
+        console.error(t('cli.errors.concurrencyRequiresValue'));
         ok = false;
       } else if (!setConcurrency(args[++i])) {
         ok = false;
       }
     } else if (a === '--config') {
       if (!args[i + 1]) {
-        console.error('Прапорець --config вимагає шлях до файлу конфігурації.');
+        console.error(t('cli.errors.configRequiresPath'));
         ok = false;
       } else if (!handleConfigArgument(args[++i])) {
         ok = false;
@@ -104,7 +84,7 @@ function parseArgs(args = process.argv.slice(2)) {
       }
     } else if (a === '--preset') {
       if (!args[i + 1]) {
-        console.error('Прапорець --preset вимагає назву або шлях до пресету.');
+        console.error(t('cli.errors.presetRequiresValue'));
         ok = false;
       } else if (!handlePresetArgument(args[++i])) {
         ok = false;
@@ -128,7 +108,9 @@ function resetCliState() {
 
 function runCli({ isRunningAsMain, invokeClean }) {
   if (currentNodeMajor() < MIN_NODE_MAJOR) {
-    console.error(`Потрібна Node.js >= ${MIN_NODE_MAJOR}. Поточна ${process.versions.node}`);
+    console.error(
+      t('cli.errors.nodeVersion', { required: MIN_NODE_MAJOR, current: process.versions.node })
+    );
     process.exit(1);
     return;
   }
@@ -156,17 +138,17 @@ function runCli({ isRunningAsMain, invokeClean }) {
 
   if (state.validateConfigOnly) {
     if (!state.configSourceProvided) {
-      console.error('Прапорець --validate вимагає принаймні один --config або --preset.');
+      console.error(t('cli.errors.validateRequiresSource'));
       process.exit(1);
       return;
     }
-    console.log('Конфігурації успішно пройшли перевірку.');
+    console.log(t('cli.messages.validationSuccess'));
     process.exit(0);
     return;
   }
 
   Promise.resolve(invokeClean()).catch((err) => {
-    console.error('Помилка виконання скрипту:', err);
+    console.error(`${t('cli.errors.executionFailed')}:`, err);
   });
 }
 

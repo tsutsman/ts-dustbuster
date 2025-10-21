@@ -1,0 +1,102 @@
+{
+  "cli": {
+    "help": "Використання: dustbuster [опції]\n\nОпції:\n  -h, --help            Показати цю довідку.\n  --dry-run             Лише показати дії без фактичного видалення.\n  --parallel            Виконувати очищення паралельно.\n  --concurrency N       Обмежити кількість паралельних завдань.\n  --dir <шлях>          Додати додатковий каталог до списку.\n  --exclude <шлях>      Виключити каталог з очищення.\n  --config <шлях>       Застосувати конфігурацію (файл або каталог).\n  --preset <назва>      Завантажити пресет за назвою або шляхом.\n  --validate            Перевірити конфігурації та пресети без очищення.\n  --config-schema       Вивести JSON Schema для конфігурацій.\n  --max-age <тривалість>Видаляти лише елементи старші за вказаний час.\n  --summary             Показати підсумкову статистику.\n  --preview             Інтерактивно підтверджувати очищення.\n  --log <файл>          Зберігати журнал виконання у файл.\n  --deep                Запускати додаткове очищення (Windows).",
+    "errors": {
+      "logRequiresPath": "Прапорець --log вимагає шлях до файлу.",
+      "dirRequiresPath": "Прапорець --dir вимагає шлях до директорії.",
+      "excludeRequiresPath": "Прапорець --exclude вимагає шлях до директорії.",
+      "maxAgeRequiresValue": "Прапорець --max-age вимагає значення тривалості.",
+      "concurrencyRequiresValue": "Прапорець --concurrency вимагає числове значення.",
+      "configRequiresPath": "Прапорець --config вимагає шлях до файлу конфігурації.",
+      "presetRequiresValue": "Прапорець --preset вимагає назву або шлях до пресету.",
+      "nodeVersion": "Потрібна Node.js >= {{required}}. Поточна {{current}}",
+      "validateRequiresSource": "Прапорець --validate вимагає принаймні один --config або --preset.",
+      "executionFailed": "Помилка виконання скрипту"
+    },
+    "messages": {
+      "validationSuccess": "Конфігурації успішно пройшли перевірку."
+    }
+  },
+  "config": {
+    "errors": {
+      "invalidMaxAgeFlag": "Невірне значення для max-age. Приклад: 12h або 30m.",
+      "invalidConcurrencyFlag": "Невірне значення для concurrency. Використайте додатне ціле число.",
+      "concurrencyMustBeIntegerFlag": "Значення concurrency має бути цілим числом.",
+      "fieldMustBeStringArray": "Поле {{key}} має бути масивом рядків.",
+      "elementMustBeString": "Елемент {{key}}[{{index}}] має бути рядком.",
+      "elementCannotBeEmpty": "Елемент {{key}}[{{index}}] не може бути порожнім рядком.",
+      "fieldMustBeBoolean": "Поле {{key}} має бути булевим значенням true/false.",
+      "logFileMustBeStringOrNull": "Поле logFile має бути непорожнім рядком або null.",
+      "maxAgeType": "Поле maxAge має бути числом годин або рядком (наприклад, 12h).",
+      "maxAgeFormat": "Поле maxAge має бути у форматі 30m, 12h, 5d або числом годин.",
+      "concurrencyPositiveInt": "Поле concurrency має бути додатним цілим числом.",
+      "concurrencyInteger": "Поле concurrency має бути цілим числом.",
+      "unknownKey": "Невідоме поле \"{{key}}\" у конфігурації.",
+      "presetNameRequired": "Назва пресету має бути непорожнім рядком.",
+      "presetNotFound": "Не вдалося знайти пресет \"{{name}}\".",
+      "cycleDetected": "Виявлено циклічне підключення пресетів.",
+      "statFailed": "Не вдалося отримати метадані: {{error}}",
+      "expectedFile": "Очікувався файл конфігурації, але отримано інший тип.",
+      "readFailed": "Не вдалося прочитати файл: {{error}}",
+      "parseFailed": "Не вдалося розпарсити конфіг: {{error}}",
+      "mustBeObject": "Конфігурація має бути об'єктом (мапою ключ-значення).",
+      "applyConcurrency": "Не вдалося застосувати concurrency.",
+      "dirNoConfigs": "Каталог не містить конфігурацій з розширеннями .json, .yaml або .yml.",
+      "readDirFailed": "Не вдалося прочитати каталог конфігурацій: {{error}}",
+      "pathMetadataFailed": "Не вдалося отримати дані про шлях: {{error}}",
+      "pathTypeUnsupported": "Шлях має бути файлом або каталогом з конфігураціями."
+    }
+  },
+  "core": {
+    "errors": {
+      "previewNotInteractive": "Режим попереднього перегляду недоступний у неінтерактивному середовищі. Каталог буде пропущено.",
+      "inspectFailed": "Не вдалося перевірити {{path}}: {{error}}",
+      "readDirFailed": "Не вдалося прочитати {{path}}: {{error}}",
+      "statFailed": "Не вдалося отримати інформацію про {{path}}: {{error}}",
+      "previewCollectFailed": "Не вдалося зібрати дані для попереднього перегляду {{path}}: {{error}}",
+      "evaluateFailed": "Не вдалося оцінити {{path}}: {{error}}",
+      "removeFailed": "Не вдалося видалити {{path}}: {{error}}",
+      "cleanFailed": "Не вдалося очистити {{path}}: {{error}}",
+      "adminRequired": "Для глибокого очищення потрібні адмінські права"
+    },
+    "preview": {
+      "header": "[preview] {{path}}",
+      "metrics": "[preview] Файлів: {{files}}, тек: {{dirs}}, оцінений розмір: {{size}}",
+      "dryRunNotice": "[preview] Активний режим dry-run: підтвердження не призведе до видалення.",
+      "prompt": "Очистити цей каталог? [y/N]: ",
+      "skipped": "[preview] Пропущено {{path}}",
+      "noneConfirmed": "Режим попереднього перегляду: жодного каталогу не підтверджено до очищення."
+    },
+    "logs": {
+      "skipExcluded": "[skip] Пропущено за виключенням: {{path}}",
+      "skipFresh": "[skip] Надто свіжий елемент: {{path}}",
+      "dryRunWouldRemove": "[dry-run] Видалив би: {{path}} ({{size}})",
+      "removed": "Видалено: {{path}}",
+      "dryRunComplete": "[dry-run] Завершив {{path}}",
+      "cleaned": "Очистив: {{path}}",
+      "previewEntry": "[preview] {{path}}"
+    },
+    "summary": {
+      "main": "Підсумок: файлів {{files}}, тек {{dirs}}, пропущено {{skipped}}, помилок {{errors}}, звільнено {{bytes}}.",
+      "duration": "Тривалість очищення: {{duration}}.",
+      "heaviestHeader": "Найважчі каталоги:",
+      "heaviestEntry": "  • {{path}} — {{size}}, файлів {{files}}, тек {{dirs}}, тривалість {{duration}}.",
+      "permissionHeader": "[warning] Пропущено через права доступу: {{count}} шляхів.",
+      "permissionEntry": "[warning]   • {{path}}",
+      "permissionMore": "[warning]   … та ще {{count}} шляхів.",
+      "dryRunNote": "Режим dry-run: показані значення відображають потенційно звільнений простір."
+    },
+    "units": {
+      "bytes": ["Б", "КБ", "МБ", "ГБ", "ТБ"],
+      "duration": {
+        "ms": "мс",
+        "s": "с",
+        "min": "хв",
+        "h": "год"
+      }
+    }
+  },
+  "gui": {
+    "listening": "GUI доступний на http://localhost:{{port}}"
+  }
+}

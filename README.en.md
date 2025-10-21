@@ -9,6 +9,7 @@
 - handles JSON/YAML configurations and presets with inheritance and configuration directories;
 - performs concurrent execution with the `--concurrency` limit and optional log file output;
 - ships with a lightweight web interface for launching cleanups from the browser.
+- localized CLI (ua/en) with automatic detection via the `LANG` environment variable.
 
 ## Getting started
 
