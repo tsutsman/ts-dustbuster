@@ -3,6 +3,7 @@ const path = require('path');
 const YAML = require('yaml');
 const { state } = require('./state');
 const { normalizePath } = require('./utils/path');
+const { t } = require('./i18n');
 
 const CONFIG_EXTENSIONS = new Set(['.json', '.yaml', '.yml']);
 const configCache = new Map();
@@ -72,7 +73,7 @@ function setMaxAge(value, origin) {
   }
   const parsed = parseDuration(value);
   if (parsed === null || Number.isNaN(parsed)) {
-    console.error(`${originPrefix(origin)}Невірне значення для max-age. Приклад: 12h або 30m.`);
+    console.error(`${originPrefix(origin)}${t('config.errors.invalidMaxAgeFlag')}`);
     return false;
   }
   state.maxAgeMs = parsed;
@@ -89,14 +90,12 @@ function setConcurrency(value, origin) {
   }
   const parsed = typeof value === 'number' ? value : parseInt(String(value), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    console.error(
-      `${originPrefix(origin)}Невірне значення для concurrency. Використайте додатне ціле число.`
-    );
+    console.error(`${originPrefix(origin)}${t('config.errors.invalidConcurrencyFlag')}`);
     return false;
   }
   const normalized = Math.floor(parsed);
   if (normalized !== parsed) {
-    console.error(`${originPrefix(origin)}Значення concurrency має бути цілим числом.`);
+    console.error(`${originPrefix(origin)}${t('config.errors.concurrencyMustBeIntegerFlag')}`);
     return false;
   }
   state.concurrency = normalized;
@@ -152,16 +151,18 @@ function mergePresetData(base, addition) {
 
 function ensureArrayOfStrings(value, key, source) {
   if (!Array.isArray(value)) {
-    throw new Error(`${originPrefix(source)}Поле ${key} має бути масивом рядків.`);
+    throw new Error(`${originPrefix(source)}${t('config.errors.fieldMustBeStringArray', { key })}`);
   }
   return value.map((item, idx) => {
     if (typeof item !== 'string') {
-      throw new Error(`${originPrefix(source)}Елемент ${key}[${idx}] має бути рядком.`);
+      throw new Error(
+        `${originPrefix(source)}${t('config.errors.elementMustBeString', { key, index: idx })}`
+      );
     }
     const trimmed = item.trim();
     if (!trimmed) {
       throw new Error(
-        `${originPrefix(source)}Елемент ${key}[${idx}] не може бути порожнім рядком.`
+        `${originPrefix(source)}${t('config.errors.elementCannotBeEmpty', { key, index: idx })}`
       );
     }
     return trimmed;
@@ -173,7 +174,7 @@ function ensureOptionalBoolean(value, key, source) {
     return undefined;
   }
   if (typeof value !== 'boolean') {
-    throw new Error(`${originPrefix(source)}Поле ${key} має бути булевим значенням true/false.`);
+    throw new Error(`${originPrefix(source)}${t('config.errors.fieldMustBeBoolean', { key })}`);
   }
   return value;
 }
@@ -186,7 +187,7 @@ function ensureOptionalLogFile(value, baseDir, source) {
     return null;
   }
   if (typeof value !== 'string' || !value.trim()) {
-    throw new Error(`${originPrefix(source)}Поле logFile має бути непорожнім рядком або null.`);
+    throw new Error(`${originPrefix(source)}${t('config.errors.logFileMustBeStringOrNull')}`);
   }
   const trimmed = value.trim();
   return normalizePath(path.isAbsolute(trimmed) ? trimmed : path.join(baseDir, trimmed));
@@ -200,15 +201,11 @@ function ensureOptionalMaxAge(value, source) {
     return null;
   }
   if (typeof value !== 'string' && typeof value !== 'number') {
-    throw new Error(
-      `${originPrefix(source)}Поле maxAge має бути числом годин або рядком (наприклад, 12h).`
-    );
+    throw new Error(`${originPrefix(source)}${t('config.errors.maxAgeType')}`);
   }
   const parsed = parseDuration(value);
   if (parsed === null || Number.isNaN(parsed)) {
-    throw new Error(
-      `${originPrefix(source)}Поле maxAge має бути у форматі 30m, 12h, 5d або числом годин.`
-    );
+    throw new Error(`${originPrefix(source)}${t('config.errors.maxAgeFormat')}`);
   }
   return parsed;
 }
@@ -222,10 +219,10 @@ function ensureOptionalConcurrency(value, source) {
   }
   const parsed = typeof value === 'number' ? value : parseInt(String(value), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error(`${originPrefix(source)}Поле concurrency має бути додатним цілим числом.`);
+    throw new Error(`${originPrefix(source)}${t('config.errors.concurrencyPositiveInt')}`);
   }
   if (!Number.isInteger(parsed)) {
-    throw new Error(`${originPrefix(source)}Поле concurrency має бути цілим числом.`);
+    throw new Error(`${originPrefix(source)}${t('config.errors.concurrencyInteger')}`);
   }
   return parsed;
 }
@@ -280,7 +277,7 @@ function extractConfig(config, baseDir, source) {
 
   for (const key of Object.keys(config)) {
     if (!ALLOWED_CONFIG_KEYS.has(key)) {
-      throw new Error(`${originPrefix(source)}Невідоме поле "${key}" у конфігурації.`);
+      throw new Error(`${originPrefix(source)}${t('config.errors.unknownKey', { key })}`);
     }
   }
 
@@ -312,7 +309,7 @@ function extractConfig(config, baseDir, source) {
 
 function resolvePreset(reference, baseDir) {
   if (typeof reference !== 'string' || !reference.trim()) {
-    throw new Error(`${originPrefix(baseDir)}Назва пресету має бути непорожнім рядком.`);
+    throw new Error(`${originPrefix(baseDir)}${t('config.errors.presetNameRequired')}`);
   }
 
   const trimmed = reference.trim();
@@ -369,7 +366,9 @@ function resolvePreset(reference, baseDir) {
     }
   }
 
-  throw new Error(`${originPrefix(baseDir)}Не вдалося знайти пресет "${reference}".`);
+  throw new Error(
+    `${originPrefix(baseDir)}${t('config.errors.presetNotFound', { name: reference })}`
+  );
 }
 
 function getCachedConfig(normalized, mtimeMs) {
@@ -383,7 +382,7 @@ function getCachedConfig(normalized, mtimeMs) {
 function parseConfigFile(filePath, visited = new Set()) {
   const normalized = normalizePath(filePath);
   if (visited.has(normalized)) {
-    throw new Error(`${originPrefix(normalized)}Виявлено циклічне підключення пресетів.`);
+    throw new Error(`${originPrefix(normalized)}${t('config.errors.cycleDetected')}`);
   }
 
   let stat;
@@ -391,14 +390,12 @@ function parseConfigFile(filePath, visited = new Set()) {
     stat = fs.statSync(normalized);
   } catch (err) {
     throw new Error(
-      `${originPrefix(normalized)}Не вдалося отримати метадані: ${extractErrorMessage(err)}`
+      `${originPrefix(normalized)}${t('config.errors.statFailed', { error: extractErrorMessage(err) })}`
     );
   }
 
   if (!stat.isFile()) {
-    throw new Error(
-      `${originPrefix(normalized)}Очікувався файл конфігурації, але отримано інший тип.`
-    );
+    throw new Error(`${originPrefix(normalized)}${t('config.errors.expectedFile')}`);
   }
 
   const cached = getCachedConfig(normalized, stat.mtimeMs);
@@ -414,7 +411,7 @@ function parseConfigFile(filePath, visited = new Set()) {
       raw = fs.readFileSync(normalized, 'utf8');
     } catch (err) {
       throw new Error(
-        `${originPrefix(normalized)}Не вдалося прочитати файл: ${extractErrorMessage(err)}`
+        `${originPrefix(normalized)}${t('config.errors.readFailed', { error: extractErrorMessage(err) })}`
       );
     }
 
@@ -433,23 +430,23 @@ function parseConfigFile(filePath, visited = new Set()) {
             parsed = raw.trim() ? YAML.parse(raw) : {};
           } catch (yamlErr) {
             throw new Error(
-              `${originPrefix(normalized)}Не вдалося розпарсити конфіг: ${
-                yamlErr.message || jsonErr.message
-              }`
+              `${originPrefix(normalized)}${t('config.errors.parseFailed', {
+                error: yamlErr.message || jsonErr.message
+              })}`
             );
           }
         }
       }
     } catch (err) {
       throw new Error(
-        `${originPrefix(normalized)}Не вдалося розпарсити конфіг: ${extractErrorMessage(err)}`
+        `${originPrefix(normalized)}${t('config.errors.parseFailed', {
+          error: extractErrorMessage(err)
+        })}`
       );
     }
 
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error(
-        `${originPrefix(normalized)}Конфігурація має бути об'єктом (мапою ключ-значення).`
-      );
+      throw new Error(`${originPrefix(normalized)}${t('config.errors.mustBeObject')}`);
     }
 
     const baseDir = path.dirname(normalized);
@@ -488,7 +485,7 @@ function applyConfigData(data, source) {
     if (data.concurrency === null) {
       state.concurrency = null;
     } else if (!setConcurrency(data.concurrency, source)) {
-      throw new Error(`${originPrefix(source)}Не вдалося застосувати concurrency.`);
+      throw new Error(`${originPrefix(source)}${t('config.errors.applyConcurrency')}`);
     }
   }
 
@@ -529,7 +526,7 @@ function listConfigFilesInDirectory(directory) {
     entries = fs.readdirSync(directory, { withFileTypes: true });
   } catch (err) {
     throw new Error(
-      `${originPrefix(directory)}Не вдалося прочитати каталог конфігурацій: ${extractErrorMessage(err)}`
+      `${originPrefix(directory)}${t('config.errors.readDirFailed', { error: extractErrorMessage(err) })}`
     );
   }
 
@@ -553,9 +550,7 @@ function applyConfigFromDirectory(resolvedDir) {
   }
 
   if (!files.length) {
-    console.error(
-      `${originPrefix(resolvedDir)}Каталог не містить конфігурацій з розширеннями .json, .yaml або .yml.`
-    );
+    console.error(`${originPrefix(resolvedDir)}${t('config.errors.dirNoConfigs')}`);
     return false;
   }
 
@@ -590,7 +585,7 @@ function handleConfigArgument(configPath) {
     stat = fs.statSync(resolved);
   } catch (err) {
     console.error(
-      `${originPrefix(resolved)}Не вдалося отримати дані про шлях: ${extractErrorMessage(err)}`
+      `${originPrefix(resolved)}${t('config.errors.pathMetadataFailed', { error: extractErrorMessage(err) })}`
     );
     return false;
   }
@@ -600,7 +595,7 @@ function handleConfigArgument(configPath) {
   }
 
   if (!stat.isFile()) {
-    console.error(`${originPrefix(resolved)}Шлях має бути файлом або каталогом з конфігураціями.`);
+    console.error(`${originPrefix(resolved)}${t('config.errors.pathTypeUnsupported')}`);
     return false;
   }
 

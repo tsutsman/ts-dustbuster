@@ -1,0 +1,102 @@
+{
+  "cli": {
+    "help": "Usage: dustbuster [options]\n\nOptions:\n  -h, --help            Show this help message.\n  --dry-run             Preview actions without deleting anything.\n  --parallel            Perform cleanup in parallel.\n  --concurrency N       Limit the number of parallel tasks.\n  --dir <path>          Add an extra directory to the list.\n  --exclude <path>      Exclude a directory from cleanup.\n  --config <path>       Apply configuration (file or directory).\n  --preset <name>       Load a preset by name or path.\n  --validate            Validate configurations and presets without cleanup.\n  --config-schema       Output the JSON Schema for configurations.\n  --max-age <duration>  Remove only items older than the specified age.\n  --summary             Print a summary report.\n  --preview             Confirm each directory interactively.\n  --log <file>          Append execution logs to a file.\n  --deep                Run additional cleanup steps (Windows).",
+    "errors": {
+      "logRequiresPath": "The --log flag requires a file path.",
+      "dirRequiresPath": "The --dir flag requires a directory path.",
+      "excludeRequiresPath": "The --exclude flag requires a directory path.",
+      "maxAgeRequiresValue": "The --max-age flag requires a duration value.",
+      "concurrencyRequiresValue": "The --concurrency flag requires a numeric value.",
+      "configRequiresPath": "The --config flag requires a configuration file path.",
+      "presetRequiresValue": "The --preset flag requires a preset name or path.",
+      "nodeVersion": "Node.js >= {{required}} is required. Current version: {{current}}",
+      "validateRequiresSource": "The --validate flag requires at least one --config or --preset.",
+      "executionFailed": "Script execution error"
+    },
+    "messages": {
+      "validationSuccess": "Configuration validation succeeded."
+    }
+  },
+  "config": {
+    "errors": {
+      "invalidMaxAgeFlag": "Invalid value for max-age. Example: 12h or 30m.",
+      "invalidConcurrencyFlag": "Invalid value for concurrency. Use a positive integer.",
+      "concurrencyMustBeIntegerFlag": "The concurrency value must be an integer.",
+      "fieldMustBeStringArray": "Field {{key}} must be an array of strings.",
+      "elementMustBeString": "Element {{key}}[{{index}}] must be a string.",
+      "elementCannotBeEmpty": "Element {{key}}[{{index}}] cannot be an empty string.",
+      "fieldMustBeBoolean": "Field {{key}} must be a boolean (true/false).",
+      "logFileMustBeStringOrNull": "Field logFile must be a non-empty string or null.",
+      "maxAgeType": "Field maxAge must be a number of hours or a string (e.g. 12h).",
+      "maxAgeFormat": "Field maxAge must follow formats like 30m, 12h, 5d, or be a numeric hour value.",
+      "concurrencyPositiveInt": "Field concurrency must be a positive integer.",
+      "concurrencyInteger": "Field concurrency must be an integer.",
+      "unknownKey": "Unknown field \"{{key}}\" in configuration.",
+      "presetNameRequired": "Preset name must be a non-empty string.",
+      "presetNotFound": "Failed to locate preset \"{{name}}\".",
+      "cycleDetected": "Detected a cyclic preset inclusion.",
+      "statFailed": "Failed to retrieve metadata: {{error}}",
+      "expectedFile": "Expected a configuration file but received a different type.",
+      "readFailed": "Failed to read file: {{error}}",
+      "parseFailed": "Failed to parse configuration: {{error}}",
+      "mustBeObject": "Configuration must be an object (key-value map).",
+      "applyConcurrency": "Failed to apply concurrency value.",
+      "dirNoConfigs": "The directory contains no .json/.yaml/.yml configuration files.",
+      "readDirFailed": "Failed to read configuration directory: {{error}}",
+      "pathMetadataFailed": "Failed to retrieve path metadata: {{error}}",
+      "pathTypeUnsupported": "Path must be a file or a directory with configurations."
+    }
+  },
+  "core": {
+    "errors": {
+      "previewNotInteractive": "Preview mode is unavailable in a non-interactive environment. The directory will be skipped.",
+      "inspectFailed": "Failed to inspect {{path}}: {{error}}",
+      "readDirFailed": "Failed to read {{path}}: {{error}}",
+      "statFailed": "Failed to retrieve information about {{path}}: {{error}}",
+      "previewCollectFailed": "Failed to collect preview data for {{path}}: {{error}}",
+      "evaluateFailed": "Failed to evaluate {{path}}: {{error}}",
+      "removeFailed": "Failed to delete {{path}}: {{error}}",
+      "cleanFailed": "Failed to clean {{path}}: {{error}}",
+      "adminRequired": "Administrator privileges are required for deep cleanup."
+    },
+    "preview": {
+      "header": "[preview] {{path}}",
+      "metrics": "[preview] Files: {{files}}, dirs: {{dirs}}, estimated size: {{size}}",
+      "dryRunNotice": "[preview] Dry-run is active: confirmation will not delete files.",
+      "prompt": "Clean this directory? [y/N]: ",
+      "skipped": "[preview] Skipped {{path}}",
+      "noneConfirmed": "Preview mode: no directories were confirmed for cleanup."
+    },
+    "logs": {
+      "skipExcluded": "[skip] Skipped by exclusion: {{path}}",
+      "skipFresh": "[skip] Too recent: {{path}}",
+      "dryRunWouldRemove": "[dry-run] Would remove: {{path}} ({{size}})",
+      "removed": "Deleted: {{path}}",
+      "dryRunComplete": "[dry-run] Completed {{path}}",
+      "cleaned": "Cleaned: {{path}}",
+      "previewEntry": "[preview] {{path}}"
+    },
+    "summary": {
+      "main": "Summary: files {{files}}, dirs {{dirs}}, skipped {{skipped}}, errors {{errors}}, reclaimed {{bytes}}.",
+      "duration": "Cleanup duration: {{duration}}.",
+      "heaviestHeader": "Heaviest directories:",
+      "heaviestEntry": "  • {{path}} — {{size}}, files {{files}}, dirs {{dirs}}, duration {{duration}}.",
+      "permissionHeader": "[warning] Skipped due to permissions: {{count}} paths.",
+      "permissionEntry": "[warning]   • {{path}}",
+      "permissionMore": "[warning]   … plus {{count}} more paths.",
+      "dryRunNote": "Dry-run mode: values reflect potential space savings."
+    },
+    "units": {
+      "bytes": ["B", "KB", "MB", "GB", "TB"],
+      "duration": {
+        "ms": "ms",
+        "s": "s",
+        "min": "min",
+        "h": "h"
+      }
+    }
+  },
+  "gui": {
+    "listening": "GUI is available at http://localhost:{{port}}"
+  }
+}

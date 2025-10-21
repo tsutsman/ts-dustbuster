@@ -5,6 +5,7 @@ const readline = require('readline');
 const { state } = require('./state');
 const { log } = require('./logging');
 const { normalizePath, isWithin } = require('./utils/path');
+const { t, getTranslationValue } = require('./i18n');
 
 const MIN_NODE_MAJOR = 16;
 const PERMISSION_ERROR_CODES = new Set(['EACCES', 'EPERM']);
@@ -75,9 +76,7 @@ async function askForPreviewConfirmation(message) {
   }
 
   if (!process.stdin.isTTY) {
-    console.error(
-      'Режим попереднього перегляду недоступний у неінтерактивному середовищі. Каталог буде пропущено.'
-    );
+    console.error(t('core.errors.previewNotInteractive'));
     return false;
   }
 
@@ -131,14 +130,14 @@ async function inspectPath(fullPath, stat, metrics) {
           if (isPermissionError(err)) {
             recordPermissionDenied(metrics, child);
           }
-          console.error(`Не вдалося перевірити ${child}:`, err.message);
+          console.error(t('core.errors.inspectFailed', { path: child, error: err.message }));
         }
       }
     } catch (err) {
       if (isPermissionError(err)) {
         recordPermissionDenied(metrics, fullPath);
       }
-      console.error(`Не вдалося прочитати ${fullPath}:`, err.message);
+      console.error(t('core.errors.readDirFailed', { path: fullPath, error: err.message }));
     }
   } else {
     info.files += 1;
@@ -147,11 +146,19 @@ async function inspectPath(fullPath, stat, metrics) {
   return info;
 }
 
-function formatBytes(bytes) {
-  if (!Number.isFinite(bytes) || bytes <= 0) {
-    return '0 Б';
+function getByteUnits() {
+  const raw = getTranslationValue('core.units.bytes');
+  if (Array.isArray(raw) && raw.length) {
+    return raw;
   }
-  const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+  return ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+}
+
+function formatBytes(bytes) {
+  const units = getByteUnits();
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return `0 ${units[0]}`;
+  }
   let idx = 0;
   let value = bytes;
   while (value >= 1024 && idx < units.length - 1) {
@@ -198,7 +205,7 @@ async function filterTargetsByPreview(targets) {
       try {
         stat = await fs.promises.lstat(dir);
       } catch (err) {
-        console.error(`Не вдалося отримати інформацію про ${dir}:`, err.message);
+        console.error(t('core.errors.statFailed', { path: dir, error: err.message }));
         continue;
       }
 
@@ -206,23 +213,27 @@ async function filterTargetsByPreview(targets) {
       try {
         info = await inspectPath(dir, stat, null);
       } catch (err) {
-        console.error(`Не вдалося зібрати дані для попереднього перегляду ${dir}:`, err.message);
+        console.error(t('core.errors.previewCollectFailed', { path: dir, error: err.message }));
         continue;
       }
 
-      log(`[preview] ${dir}`);
+      log(t('core.logs.previewEntry', { path: dir }));
       log(
-        `[preview] Файлів: ${info.files}, тек: ${info.dirs}, оцінений розмір: ${formatBytes(info.bytes)}`
+        t('core.preview.metrics', {
+          files: info.files,
+          dirs: info.dirs,
+          size: formatBytes(info.bytes)
+        })
       );
       if (state.dryRun) {
-        log('[preview] Активний режим dry-run: підтвердження не призведе до видалення.');
+        log(t('core.preview.dryRunNotice'));
       }
 
-      const confirm = await askForPreviewConfirmation('Очистити цей каталог? [y/N]: ');
+      const confirm = await askForPreviewConfirmation(t('core.preview.prompt'));
       if (confirm) {
         confirmed.push(dir);
       } else {
-        log(`[preview] Пропущено ${dir}`);
+        log(t('core.preview.skipped', { path: dir }));
       }
     }
   } finally {
@@ -276,7 +287,7 @@ async function removeDirContents(dir, metrics = createMetrics()) {
     for (const entry of entries) {
       const fullPath = path.join(dir, entry);
       if (isExcluded(fullPath)) {
-        log(`[skip] У переліку виключень: ${fullPath}`);
+        log(t('core.logs.skipExcluded', { path: fullPath }));
         metrics.skipped += 1;
         continue;
       }
@@ -284,7 +295,7 @@ async function removeDirContents(dir, metrics = createMetrics()) {
       try {
         stat = await fs.promises.lstat(fullPath);
       } catch (err) {
-        console.error(`Не вдалося отримати інформацію про ${fullPath}:`, err.message);
+        console.error(t('core.errors.statFailed', { path: fullPath, error: err.message }));
         metrics.errors += 1;
         if (isPermissionError(err)) {
           recordPermissionDenied(metrics, fullPath);
@@ -294,7 +305,7 @@ async function removeDirContents(dir, metrics = createMetrics()) {
       if (state.maxAgeMs !== null) {
         const age = Date.now() - stat.mtimeMs;
         if (age < state.maxAgeMs) {
-          log(`[skip] Надто свіжий елемент: ${fullPath}`);
+          log(t('core.logs.skipFresh', { path: fullPath }));
           metrics.skipped += 1;
           continue;
         }
@@ -303,7 +314,7 @@ async function removeDirContents(dir, metrics = createMetrics()) {
       try {
         info = await inspectPath(fullPath, stat, metrics);
       } catch (err) {
-        console.error(`Не вдалося оцінити ${fullPath}:`, err.message);
+        console.error(t('core.errors.evaluateFailed', { path: fullPath, error: err.message }));
         metrics.errors += 1;
         if (isPermissionError(err)) {
           recordPermissionDenied(metrics, fullPath);
@@ -311,13 +322,13 @@ async function removeDirContents(dir, metrics = createMetrics()) {
         continue;
       }
       if (state.dryRun) {
-        log(`[dry-run] Видалив би: ${fullPath} (${formatBytes(info.bytes)})`);
+        log(t('core.logs.dryRunWouldRemove', { path: fullPath, size: formatBytes(info.bytes) }));
       } else {
         try {
           await fs.promises.rm(fullPath, { recursive: true, force: true });
-          log(`Видалено: ${fullPath}`);
+          log(t('core.logs.removed', { path: fullPath }));
         } catch (err) {
-          console.error(`Не вдалося видалити ${fullPath}:`, err.message);
+          console.error(t('core.errors.removeFailed', { path: fullPath, error: err.message }));
           metrics.errors += 1;
           if (isPermissionError(err)) {
             recordPermissionDenied(metrics, fullPath);
@@ -329,9 +340,13 @@ async function removeDirContents(dir, metrics = createMetrics()) {
       metrics.dirs += info.dirs;
       metrics.bytes += info.bytes;
     }
-    log(state.dryRun ? `[dry-run] Завершив ${dir}` : `Очистив: ${dir}`);
+    log(
+      state.dryRun
+        ? t('core.logs.dryRunComplete', { path: dir })
+        : t('core.logs.cleaned', { path: dir })
+    );
   } catch (err) {
-    console.error(`Не вдалося очистити ${dir}:`, err.message);
+    console.error(t('core.errors.cleanFailed', { path: dir, error: err.message }));
     metrics.errors += 1;
     if (isPermissionError(err)) {
       recordPermissionDenied(metrics, dir);
@@ -435,7 +450,7 @@ async function clean({ targets: targetOverride } = {}) {
 
   let filteredTargets = targets.filter((dir) => {
     if (isExcluded(dir)) {
-      log(`[skip] Каталог пропущено за виключенням: ${dir}`);
+      log(t('core.logs.skipExcluded', { path: dir }));
       return false;
     }
     return true;
@@ -445,7 +460,7 @@ async function clean({ targets: targetOverride } = {}) {
     const confirmed = await filterTargetsByPreview(filteredTargets);
     filteredTargets = confirmed;
     if (filteredTargets.length === 0) {
-      log('Режим попереднього перегляду: жодного каталогу не підтверджено до очищення.');
+      log(t('core.preview.noneConfirmed'));
     }
   }
 
@@ -510,55 +525,83 @@ async function clean({ targets: targetOverride } = {}) {
 function logSummary(total, details = {}) {
   const { durationMs = 0, targets = [] } = details;
   log(
-    `Підсумок: файлів ${total.files}, тек ${total.dirs}, пропущено ${total.skipped}, помилок ${total.errors}, звільнено ${formatBytes(total.bytes)}.`
+    t('core.summary.main', {
+      files: total.files,
+      dirs: total.dirs,
+      skipped: total.skipped,
+      errors: total.errors,
+      bytes: formatBytes(total.bytes)
+    })
   );
   if (durationMs > 0) {
-    log(`Тривалість очищення: ${formatDuration(durationMs)}.`);
+    log(t('core.summary.duration', { duration: formatDuration(durationMs) }));
   }
   const heaviest = targets
     .filter((item) => item.bytes > 0)
     .sort((a, b) => b.bytes - a.bytes)
     .slice(0, 3);
   if (heaviest.length > 0) {
-    log('Найважчі каталоги:');
+    log(t('core.summary.heaviestHeader'));
     heaviest.forEach((item) => {
       log(
-        `  • ${item.path} — ${formatBytes(item.bytes)}, файлів ${item.files}, тек ${item.dirs}, тривалість ${formatDuration(item.durationMs)}.`
+        t('core.summary.heaviestEntry', {
+          path: item.path,
+          size: formatBytes(item.bytes),
+          files: item.files,
+          dirs: item.dirs,
+          duration: formatDuration(item.durationMs)
+        })
       );
     });
   }
   if (Array.isArray(total.permissionDenied) && total.permissionDenied.length > 0) {
-    log(`[warning] Пропущено через права доступу: ${total.permissionDenied.length} шляхів.`);
+    log(t('core.summary.permissionHeader', { count: total.permissionDenied.length }));
     const preview = total.permissionDenied.slice(0, 5);
     preview.forEach((entry) => {
-      log(`[warning]   • ${entry}`);
+      log(t('core.summary.permissionEntry', { path: entry }));
     });
     if (total.permissionDenied.length > preview.length) {
-      log(`[warning]   … та ще ${total.permissionDenied.length - preview.length} шляхів.`);
+      log(
+        t('core.summary.permissionMore', {
+          count: total.permissionDenied.length - preview.length
+        })
+      );
     }
   }
   if (state.dryRun) {
-    log('Режим dry-run: показані значення відображають потенційно звільнений простір.');
+    log(t('core.summary.dryRunNote'));
   }
 }
 
+function getDurationUnits() {
+  const raw = getTranslationValue('core.units.duration');
+  if (raw && typeof raw === 'object') {
+    return raw;
+  }
+  return { ms: 'мс', s: 'с', min: 'хв', h: 'год' };
+}
+
 function formatDuration(durationMs) {
+  const units = getDurationUnits();
   if (!Number.isFinite(durationMs) || durationMs <= 0) {
-    return '0 мс';
+    return `0 ${units.ms || 'мс'}`;
   }
   if (durationMs < 1000) {
-    return `${Math.round(durationMs)} мс`;
+    return `${Math.round(durationMs)} ${units.ms || 'мс'}`;
   }
   const seconds = durationMs / 1000;
   if (seconds < 60) {
-    return `${seconds >= 10 ? Math.round(seconds) : seconds.toFixed(1)} с`;
+    const value = seconds >= 10 ? Math.round(seconds) : seconds.toFixed(1);
+    return `${value} ${units.s || 'с'}`;
   }
   const minutes = seconds / 60;
   if (minutes < 60) {
-    return `${minutes >= 10 ? Math.round(minutes) : minutes.toFixed(1)} хв`;
+    const value = minutes >= 10 ? Math.round(minutes) : minutes.toFixed(1);
+    return `${value} ${units.min || 'хв'}`;
   }
   const hours = minutes / 60;
-  return `${hours >= 10 ? Math.round(hours) : hours.toFixed(1)} год`;
+  const value = hours >= 10 ? Math.round(hours) : hours.toFixed(1);
+  return `${value} ${units.h || 'год'}`;
 }
 
 function setCleanOverride(handler) {
@@ -580,7 +623,7 @@ function isAdmin() {
 
 function advancedWindowsClean() {
   if (!isAdmin()) {
-    console.error('Для глибокого очищення потрібні адмінські права');
+    console.error(t('core.errors.adminRequired'));
     return;
   }
   try {

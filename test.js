@@ -21,10 +21,25 @@ const {
   runWithLimit
 } = require('./cleaner');
 const { handleConfigArgument } = require('./src/config');
+const { t: translate, setLocaleOverride } = require('./src/i18n');
 
 const CURRENT_NODE_MAJOR = parseInt(process.versions.node.split('.')[0], 10);
 
 (async () => {
+  // Тест локалізації
+  setLocaleOverride('en');
+  assert.strictEqual(
+    translate('cli.errors.logRequiresPath'),
+    'The --log flag requires a file path.',
+    'Англомовний переклад має повертатися для --log'
+  );
+  setLocaleOverride('uk');
+  assert.strictEqual(
+    translate('cli.errors.logRequiresPath'),
+    'Прапорець --log вимагає шлях до файлу.',
+    'Україномовний переклад має повертатися для --log'
+  );
+
   // Тест pushIfExists
   resetOptions();
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'db-test-'));
