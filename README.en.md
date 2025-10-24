@@ -70,7 +70,14 @@ Detailed guidance with JSON/YAML examples, preset structure, and CI/CD tips live
 node gui.js
 ```
 
-Open `http://localhost:3000`, click the clean button, and watch the log output. The GUI runs locally and has no authentication, so do not expose it to public networks.
+Open `http://localhost:3000`. The refreshed UI now includes:
+
+- a help panel with prerequisites (permissions, configuration flags, dry-run guidance);
+- contextual hints for the clean button with a live status indicator;
+- a log explanation block and troubleshooting checklist for common failures;
+- direct links to documentation for deeper customization.
+
+The GUI runs locally and has no authentication, so do not expose it to public networks.
 
 ## Tests
 

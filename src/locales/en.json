@@ -97,6 +97,31 @@
     }
   },
   "gui": {
-    "listening": "GUI is available at http://localhost:{{port}}"
+    "listening": "GUI is available at http://localhost:{{port}}",
+    "actions": {
+      "start": "Clean temporary files",
+      "status": {
+        "idle": "Press the button to start cleaning.",
+        "sent": "Cleanup request submitted…",
+        "done": "Complete. Review the log above.",
+        "failed": "Cleanup failed — check the log."
+      }
+    },
+    "help": {
+      "title": "Temporary files cleanup",
+      "intro": "The interface triggers the dustbuster script using the server configuration.",
+      "requirements": [
+        "Run the tool locally: the GUI has no authentication.",
+        "Windows deep-clean requires administrative privileges.",
+        "Global CLI flags (directories, exclusions, dry-run) are configured on the server side.",
+        "Keep the page open during execution to follow the log.",
+        "Copy the summary for auditing if required."
+      ],
+      "troubleshooting": [
+        "Ensure gui.js is running and not blocked by a firewall.",
+        "Re-run manually with node cleaner.js --summary --log dustbuster.log.",
+        "Adjust permissions or exclude problematic paths if access is denied."
+      ]
+    }
   }
 }
