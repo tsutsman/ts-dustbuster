@@ -1,17 +1,243 @@
 <!DOCTYPE html>
 <html lang="uk">
-<head>
-  <meta charset="UTF-8" />
-  <title>ts-dustbuster GUI</title>
-</head>
-<body>
-  <button id="run">Очистити тимчасові файли</button>
-  <pre id="out"></pre>
-  <script>
-    document.getElementById('run').onclick = async () => {
-      const res = await fetch('/clean', { method: 'POST' });
-      document.getElementById('out').textContent = await res.text();
-    };
-  </script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ts-dustbuster GUI</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+        line-height: 1.5;
+      }
+
+      body {
+        margin: 0;
+        padding: 2rem;
+        background: linear-gradient(180deg, #0b3d61 0%, #102a43 30%, #0b1d2a 100%);
+        color: #f6f9fc;
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+      }
+
+      main {
+        width: min(960px, 100%);
+        background-color: rgba(15, 27, 44, 0.85);
+        border-radius: 20px;
+        box-shadow: 0 20px 45px rgba(0, 0, 0, 0.35);
+        padding: clamp(1.5rem, 2vw, 2.5rem);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      header h1 {
+        margin-top: 0;
+        font-size: clamp(2rem, 4vw, 2.8rem);
+        letter-spacing: 0.04em;
+      }
+
+      header p {
+        margin-bottom: 1.5rem;
+        font-size: 1.05rem;
+        color: rgba(246, 249, 252, 0.85);
+      }
+
+      section + section,
+      section + details,
+      details + section {
+        margin-top: 1.8rem;
+      }
+
+      h2 {
+        font-size: 1.35rem;
+        margin-bottom: 0.75rem;
+      }
+
+      ul {
+        padding-left: 1.2rem;
+      }
+
+      li + li {
+        margin-top: 0.35rem;
+      }
+
+      .action-area {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-top: 1.5rem;
+        margin-bottom: 1.5rem;
+      }
+
+      #run {
+        padding: 0.85rem 1.6rem;
+        border-radius: 12px;
+        border: none;
+        font-size: 1.05rem;
+        font-weight: 600;
+        background: linear-gradient(135deg, #24a1ff, #1c6dd0);
+        color: #03172b;
+        cursor: pointer;
+        transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+      }
+
+      #run:disabled {
+        cursor: progress;
+        opacity: 0.6;
+        box-shadow: none;
+      }
+
+      #run:not(:disabled):hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 25px rgba(36, 161, 255, 0.35);
+        filter: brightness(1.05);
+      }
+
+      #status {
+        font-size: 0.95rem;
+        color: rgba(173, 214, 255, 0.9);
+      }
+
+      #hints {
+        font-size: 0.95rem;
+        color: rgba(246, 249, 252, 0.75);
+      }
+
+      pre {
+        background: rgba(3, 15, 28, 0.75);
+        border-radius: 14px;
+        padding: 1.2rem;
+        font-size: 0.9rem;
+        max-height: 320px;
+        overflow: auto;
+        border: 1px solid rgba(173, 214, 255, 0.14);
+        color: rgba(229, 241, 255, 0.9);
+      }
+
+      details {
+        background: rgba(3, 15, 28, 0.6);
+        border-radius: 14px;
+        padding: 1rem 1.2rem;
+        border: 1px solid rgba(173, 214, 255, 0.14);
+      }
+
+      details summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+
+      footer {
+        margin-top: 2rem;
+        font-size: 0.9rem;
+        color: rgba(246, 249, 252, 0.65);
+      }
+
+      footer a {
+        color: #7fd2ff;
+      }
+
+      @media (max-width: 640px) {
+        body {
+          padding: 1.25rem;
+        }
+
+        main {
+          padding: 1.5rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Очищення тимчасових файлів</h1>
+        <p>
+          Інтерфейс запускає скрипт <code>dustbuster</code> з поточними налаштуваннями сервера.
+          Перед стартом переконайтеся, що маєте права на видалення вибраних директорій і що CLI вже налаштований.
+        </p>
+      </header>
+
+      <section aria-labelledby="requirements">
+        <h2 id="requirements">Що варто знати перед запуском</h2>
+        <ul>
+          <li>Запускайте інструмент локально: GUI не захищений автентифікацією.</li>
+          <li>Для опції глибокого очищення на Windows потрібні адміністративні права.</li>
+          <li>Глобальні параметри CLI (директорії, виключення, dry-run) застосовуються через конфігураційні файли сервера.</li>
+          <li>Під час виконання не закривайте сторінку — журнал покаже всі кроки очищення.</li>
+        </ul>
+      </section>
+
+      <section class="action-area" aria-labelledby="action">
+        <div>
+          <h2 id="action">Запуск очищення</h2>
+          <p id="hints">
+            Кнопка нижче надсилає HTTP POST на <code>/clean</code>. Якщо потрібно протестувати без видалення, додайте прапор <code>--dry-run</code>
+            у конфігурації сервера перед відкриттям GUI.
+          </p>
+        </div>
+        <button id="run" type="button" aria-describedby="hints">Очистити тимчасові файли</button>
+        <div id="status" role="status" aria-live="polite"></div>
+      </section>
+
+      <section aria-labelledby="log">
+        <h2 id="log">Журнал виконання</h2>
+        <p>
+          Після завершення ви побачите зведення, попередження про доступ та шлях до кожного видаленого елементу. Скопіюйте дані для аудиту, якщо потрібно.
+        </p>
+        <pre id="out" aria-live="polite" aria-label="Вивід очищення"></pre>
+      </section>
+
+      <details>
+        <summary>Що робити, якщо виникла помилка</summary>
+        <ul>
+          <li>Перевірте, чи запущений сервер <code>gui.js</code> і не заблокований брандмауером.</li>
+          <li>Зазирніть у лог CLI: <code>node cleaner.js --summary --log dustbuster.log</code> допоможе відтворити сценарій вручну.</li>
+          <li>Для прав доступу використовуйте адміністраторський режим або виключіть проблемні каталоги.</li>
+        </ul>
+      </details>
+
+      <footer>
+        Додаткові інструкції — у <a href="../README.md" target="_blank" rel="noopener">README</a> та розділі
+        <a href="../docs/configuration.md" target="_blank" rel="noopener">docs/configuration.md</a>.
+      </footer>
+    </main>
+
+    <script>
+      const runButton = document.getElementById('run');
+      const out = document.getElementById('out');
+      const status = document.getElementById('status');
+
+      status.textContent = 'Натисніть кнопку, щоб запустити очищення.';
+
+      async function runCleanup() {
+        runButton.disabled = true;
+        status.textContent = 'Запит на очищення відправлено…';
+        out.textContent = '';
+
+        try {
+          const response = await fetch('/clean', { method: 'POST' });
+          const text = await response.text();
+
+          if (!response.ok) {
+            throw new Error(text || 'Сервер повернув помилку.');
+          }
+
+          out.textContent = text;
+          status.textContent = 'Готово. Перегляньте журнал вище.';
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          out.textContent = out.textContent
+            ? `${out.textContent}\n\n[ui] Помилка: ${message}`
+            : `[ui] Помилка: ${message}`;
+          status.textContent = 'Не вдалося виконати очищення — перевірте журнал.';
+        } finally {
+          runButton.disabled = false;
+        }
+      }
+
+      runButton.addEventListener('click', runCleanup);
+    </script>
+  </body>
 </html>
