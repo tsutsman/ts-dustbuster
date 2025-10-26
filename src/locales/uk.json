@@ -81,6 +81,13 @@
       "duration": "Тривалість очищення: {{duration}}.",
       "heaviestHeader": "Найважчі каталоги:",
       "heaviestEntry": "  • {{path}} — {{size}}, файлів {{files}}, тек {{dirs}}, тривалість {{duration}}.",
+      "skippedHeader": "Розподіл пропусків:",
+      "skippedEntry": "  • {{reason}} — {{count}}",
+      "skippedReason": {
+        "excluded": "виключено правилами",
+        "maxAge": "занадто свіжі файли",
+        "preview": "відхилено у попередньому перегляді"
+      },
       "permissionHeader": "[warning] Пропущено через права доступу: {{count}} шляхів.",
       "permissionEntry": "[warning]   • {{path}}",
       "permissionMore": "[warning]   … та ще {{count}} шляхів.",
