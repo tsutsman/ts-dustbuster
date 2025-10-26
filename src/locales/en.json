@@ -81,6 +81,13 @@
       "duration": "Cleanup duration: {{duration}}.",
       "heaviestHeader": "Heaviest directories:",
       "heaviestEntry": "  • {{path}} — {{size}}, files {{files}}, dirs {{dirs}}, duration {{duration}}.",
+      "skippedHeader": "Skip breakdown:",
+      "skippedEntry": "  • {{reason}} — {{count}}",
+      "skippedReason": {
+        "excluded": "excluded by rules",
+        "maxAge": "too fresh files",
+        "preview": "declined during preview"
+      },
       "permissionHeader": "[warning] Skipped due to permissions: {{count}} paths.",
       "permissionEntry": "[warning]   • {{path}}",
       "permissionMore": "[warning]   … plus {{count}} more paths.",

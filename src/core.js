@@ -10,6 +10,14 @@ const { t, getTranslationValue } = require('./i18n');
 const MIN_NODE_MAJOR = 16;
 const PERMISSION_ERROR_CODES = new Set(['EACCES', 'EPERM']);
 
+function createSkipStats() {
+  return {
+    excluded: 0,
+    maxAge: 0,
+    preview: 0
+  };
+}
+
 function currentPlatform() {
   return state.platformOverride || process.platform;
 }
@@ -168,8 +176,27 @@ function formatBytes(bytes) {
   return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`;
 }
 
+function registerSkip(metrics, reason) {
+  if (!metrics) {
+    return;
+  }
+  metrics.skipped += 1;
+  if (!metrics.skippedBy) {
+    metrics.skippedBy = createSkipStats();
+  }
+  metrics.skippedBy[reason] = (metrics.skippedBy[reason] || 0) + 1;
+}
+
 function createMetrics() {
-  return { files: 0, dirs: 0, bytes: 0, skipped: 0, errors: 0, permissionDenied: [] };
+  return {
+    files: 0,
+    dirs: 0,
+    bytes: 0,
+    skipped: 0,
+    errors: 0,
+    permissionDenied: [],
+    skippedBy: createSkipStats()
+  };
 }
 
 function mergeMetrics(target, addition) {
@@ -182,6 +209,16 @@ function mergeMetrics(target, addition) {
     for (const entry of addition.permissionDenied) {
       if (!target.permissionDenied.includes(entry)) {
         target.permissionDenied.push(entry);
+      }
+    }
+  }
+  if (addition.skippedBy) {
+    if (!target.skippedBy) {
+      target.skippedBy = createSkipStats();
+    }
+    for (const [reason, count] of Object.entries(addition.skippedBy)) {
+      if (count > 0) {
+        target.skippedBy[reason] = (target.skippedBy[reason] || 0) + count;
       }
     }
   }
@@ -198,6 +235,7 @@ function isExcluded(target) {
 
 async function filterTargetsByPreview(targets) {
   const confirmed = [];
+  const skipped = [];
 
   try {
     for (const dir of targets) {
@@ -234,13 +272,16 @@ async function filterTargetsByPreview(targets) {
         confirmed.push(dir);
       } else {
         log(t('core.preview.skipped', { path: dir }));
+        skipped.push(dir);
       }
     }
   } finally {
     closePreviewInterface();
   }
 
-  return confirmed;
+  const result = confirmed;
+  result.skipped = skipped;
+  return result;
 }
 
 function pushIfExists(list, dir) {
@@ -288,7 +329,7 @@ async function removeDirContents(dir, metrics = createMetrics()) {
       const fullPath = path.join(dir, entry);
       if (isExcluded(fullPath)) {
         log(t('core.logs.skipExcluded', { path: fullPath }));
-        metrics.skipped += 1;
+        registerSkip(metrics, 'excluded');
         continue;
       }
       let stat;
@@ -306,7 +347,7 @@ async function removeDirContents(dir, metrics = createMetrics()) {
         const age = Date.now() - stat.mtimeMs;
         if (age < state.maxAgeMs) {
           log(t('core.logs.skipFresh', { path: fullPath }));
-          metrics.skipped += 1;
+          registerSkip(metrics, 'maxAge');
           continue;
         }
       }
@@ -368,6 +409,7 @@ function concurrencyLimit(taskCount) {
 async function clean({ targets: targetOverride } = {}) {
   const runStarted = process.hrtime.bigint();
   const targets = [];
+  let previewSkippedCount = 0;
   if (Array.isArray(targetOverride) && targetOverride.length > 0) {
     targetOverride.forEach((dir) => pushIfExists(targets, dir));
   } else {
@@ -457,8 +499,12 @@ async function clean({ targets: targetOverride } = {}) {
   });
 
   if (state.interactivePreview && filteredTargets.length > 0) {
-    const confirmed = await filterTargetsByPreview(filteredTargets);
-    filteredTargets = confirmed;
+    const previewResult = await filterTargetsByPreview(filteredTargets);
+    filteredTargets = previewResult;
+    previewSkippedCount = 0;
+    if (Array.isArray(previewResult.skipped)) {
+      previewSkippedCount = previewResult.skipped.length;
+    }
     if (filteredTargets.length === 0) {
       log(t('core.preview.noneConfirmed'));
     }
@@ -469,6 +515,10 @@ async function clean({ targets: targetOverride } = {}) {
     const durationMs = Number(process.hrtime.bigint() - runStarted) / 1e6;
     total.durationMs = durationMs;
     total.targetSummaries = [];
+    if (previewSkippedCount > 0) {
+      total.skipped += previewSkippedCount;
+      total.skippedBy.preview += previewSkippedCount;
+    }
     if (state.summary) {
       logSummary(total, { durationMs, targets: [] });
     }
@@ -508,8 +558,16 @@ async function clean({ targets: targetOverride } = {}) {
     skipped: item.metrics.skipped,
     errors: item.metrics.errors,
     durationMs: item.durationMs,
-    permissionDenied: [...item.metrics.permissionDenied]
+    permissionDenied: [...item.metrics.permissionDenied],
+    skippedBy: { ...(item.metrics.skippedBy || {}) }
   }));
+  if (previewSkippedCount > 0) {
+    total.skipped += previewSkippedCount;
+    if (!total.skippedBy) {
+      total.skippedBy = createSkipStats();
+    }
+    total.skippedBy.preview += previewSkippedCount;
+  }
 
   if (state.summary) {
     logSummary(total, { durationMs, targets: total.targetSummaries });
@@ -553,6 +611,20 @@ function logSummary(total, details = {}) {
         })
       );
     });
+  }
+  const skipEntries = Object.entries(total.skippedBy || {}).filter(([, count]) => count > 0);
+  if (skipEntries.length > 0) {
+    log(t('core.summary.skippedHeader'));
+    skipEntries
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([reason, count]) => {
+        log(
+          t('core.summary.skippedEntry', {
+            reason: t(`core.summary.skippedReason.${reason}`),
+            count
+          })
+        );
+      });
   }
   if (Array.isArray(total.permissionDenied) && total.permissionDenied.length > 0) {
     log(t('core.summary.permissionHeader', { count: total.permissionDenied.length }));

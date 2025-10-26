@@ -252,6 +252,11 @@ const CURRENT_NODE_MAJOR = parseInt(process.versions.node.split('.')[0], 10);
   assert.ok(fs.existsSync(protectedFile), 'Файл у виключеній директорії має залишитися');
   assert.ok(resultMetrics.files >= 1, 'Повинен бути щонайменше один видалений файл');
   assert.ok(resultMetrics.skipped >= 2, 'Повинні бути пропуски через max-age та exclude');
+  assert.ok(
+    resultMetrics.skippedBy.maxAge >= 1,
+    'Має бути зафіксовано пропуск через обмеження max-age'
+  );
+  assert.ok(resultMetrics.skippedBy.excluded >= 1, 'Має бути зафіксовано пропуск через виключення');
   fs.rmSync(tmp3, { recursive: true, force: true });
 
   // Тест YAML-конфігурації з пресетами
@@ -434,6 +439,12 @@ const CURRENT_NODE_MAJOR = parseInt(process.versions.node.split('.')[0], 10);
   const skipMetrics = await clean({ targets: [previewSkipDir] });
   assert.ok(fs.existsSync(previewSkipFile), 'Файл має залишитися після відмови від очищення');
   assert.strictEqual(skipMetrics.files, 0, 'Метрики не мають враховувати видалень при відмові');
+  assert.strictEqual(skipMetrics.skipped, 1, 'Відмова в preview має рахуватися як один пропуск');
+  assert.strictEqual(
+    skipMetrics.skippedBy.preview,
+    1,
+    'Пропуски у preview мають відображатися в деталізації'
+  );
   resetOptions();
   fs.rmSync(previewSkipDir, { recursive: true, force: true });
 
@@ -447,6 +458,12 @@ const CURRENT_NODE_MAJOR = parseInt(process.versions.node.split('.')[0], 10);
   const confirmMetrics = await clean({ targets: [previewConfirmDir] });
   assert.ok(!fs.existsSync(previewConfirmFile), 'Файл має бути видалений після підтвердження');
   assert.strictEqual(confirmMetrics.files, 1, 'Повинен бути видалений один файл');
+  assert.strictEqual(confirmMetrics.skipped, 0, 'За підтвердження пропусків бути не повинно');
+  assert.strictEqual(
+    confirmMetrics.skippedBy.preview,
+    0,
+    'Підтверджені каталоги не мають позначатися як пропущені у preview'
+  );
   resetOptions();
   fs.rmSync(previewConfirmDir, { recursive: true, force: true });
 
