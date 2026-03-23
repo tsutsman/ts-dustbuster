@@ -1,0 +1,37 @@
+{
+  "processes": {
+    "54fcd4a4-d990-4616-866f-acf5dd9da395": { "parent": null, "children": [] },
+    "df31331e-b3e1-47d1-bb29-f2952ecafae0": { "parent": null, "children": [] }
+  },
+  "files": {
+    "d:\\Work\\tsutsman\\Github\\ts-dustbuster\\cleaner.js": [
+      "54fcd4a4-d990-4616-866f-acf5dd9da395",
+      "df31331e-b3e1-47d1-bb29-f2952ecafae0"
+    ],
+    "d:\\Work\\tsutsman\\Github\\ts-dustbuster\\src\\config.js": [
+      "54fcd4a4-d990-4616-866f-acf5dd9da395",
+      "df31331e-b3e1-47d1-bb29-f2952ecafae0"
+    ],
+    "d:\\Work\\tsutsman\\Github\\ts-dustbuster\\src\\core.js": [
+      "54fcd4a4-d990-4616-866f-acf5dd9da395",
+      "df31331e-b3e1-47d1-bb29-f2952ecafae0"
+    ],
+    "d:\\Work\\tsutsman\\Github\\ts-dustbuster\\src\\i18n.js": [
+      "54fcd4a4-d990-4616-866f-acf5dd9da395",
+      "df31331e-b3e1-47d1-bb29-f2952ecafae0"
+    ],
+    "d:\\Work\\tsutsman\\Github\\ts-dustbuster\\src\\logging.js": [
+      "54fcd4a4-d990-4616-866f-acf5dd9da395",
+      "df31331e-b3e1-47d1-bb29-f2952ecafae0"
+    ],
+    "d:\\Work\\tsutsman\\Github\\ts-dustbuster\\src\\state.js": [
+      "54fcd4a4-d990-4616-866f-acf5dd9da395",
+      "df31331e-b3e1-47d1-bb29-f2952ecafae0"
+    ],
+    "d:\\Work\\tsutsman\\Github\\ts-dustbuster\\src\\utils\\path.js": [
+      "54fcd4a4-d990-4616-866f-acf5dd9da395",
+      "df31331e-b3e1-47d1-bb29-f2952ecafae0"
+    ]
+  },
+  "externalIds": {}
+}

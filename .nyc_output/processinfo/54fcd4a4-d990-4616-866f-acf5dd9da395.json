@@ -1,0 +1,26 @@
+{
+  "parent": null,
+  "pid": 12704,
+  "argv": [
+    "C:\\Program Files\\nodejs\\node.exe",
+    "d:\\Work\\tsutsman\\Github\\ts-dustbuster\\node_modules\\nyc\\bin\\nyc.js",
+    "node",
+    "test.js"
+  ],
+  "execArgv": [],
+  "cwd": "d:\\Work\\tsutsman\\Github\\ts-dustbuster",
+  "time": 1774257969497,
+  "ppid": 26292,
+  "coverageFilename": "d:\\Work\\tsutsman\\Github\\ts-dustbuster\\.nyc_output\\54fcd4a4-d990-4616-866f-acf5dd9da395.json",
+  "externalId": "",
+  "uuid": "54fcd4a4-d990-4616-866f-acf5dd9da395",
+  "files": [
+    "d:\\Work\\tsutsman\\Github\\ts-dustbuster\\cleaner.js",
+    "d:\\Work\\tsutsman\\Github\\ts-dustbuster\\src\\config.js",
+    "d:\\Work\\tsutsman\\Github\\ts-dustbuster\\src\\core.js",
+    "d:\\Work\\tsutsman\\Github\\ts-dustbuster\\src\\i18n.js",
+    "d:\\Work\\tsutsman\\Github\\ts-dustbuster\\src\\logging.js",
+    "d:\\Work\\tsutsman\\Github\\ts-dustbuster\\src\\state.js",
+    "d:\\Work\\tsutsman\\Github\\ts-dustbuster\\src\\utils\\path.js"
+  ]
+}
