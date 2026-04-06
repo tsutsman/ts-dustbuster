@@ -208,34 +208,104 @@
       const runButton = document.getElementById('run');
       const out = document.getElementById('out');
       const status = document.getElementById('status');
+      const hints = document.getElementById('hints');
+
+      let currentLocale = 'uk';
+      let locales = {};
+
+      async function loadLocales() {
+        try {
+          const resp = await fetch('/locales');
+          if (resp.ok) {
+            locales = await resp.json();
+          }
+        } catch (e) {
+          console.warn('Не вдалося завантажити локалі:', e);
+        }
+      }
+
+      function t(key, params = {}) {
+        let msg = key;
+        if (locales[currentLocale] && locales[currentLocale][key]) {
+          msg = locales[currentLocale][key];
+        } else if (locales['en'] && locales['en'][key]) {
+          msg = locales['en'][key];
+        }
+        for (const [k, v] of Object.entries(params)) {
+          msg = msg.replace(`{${k}}`, v);
+        }
+        return msg;
+      }
+
+      function updateUI() {
+        document.querySelector('header h1').textContent = t('gui.title');
+        document.querySelector('header p').textContent = t('gui.description');
+        document.querySelector('h2#requirements').textContent = t('gui.requirementsTitle');
+        document.querySelector('h2#action').textContent = t('gui.actionTitle');
+        document.querySelector('p#hints').textContent = t('gui.hints');
+        document.querySelector('button#run').textContent = t('gui.runButton');
+        document.querySelector('h2#log').textContent = t('gui.logTitle');
+        document.querySelector('section[aria-labelledby="log"] p').textContent = t('gui.logDesc');
+        document.querySelector('details summary').textContent = t('gui.troubleshooting');
+        document.querySelector('footer').innerHTML = t('gui.footer');
+        status.textContent = t('gui.status.ready');
+      }
 
       status.textContent = 'Натисніть кнопку, щоб запустити очищення.';
 
       async function runCleanup() {
         runButton.disabled = true;
-        status.textContent = 'Запит на очищення відправлено…';
+        status.textContent = t('gui.status.running');
         out.textContent = '';
+        hints.textContent = t('gui.hintsRunning');
 
         try {
           const response = await fetch('/clean', { method: 'POST' });
-          const text = await response.text();
+          const data = await response.json();
 
-          if (!response.ok) {
-            throw new Error(text || 'Сервер повернув помилку.');
+          if (!response.ok || !data.success) {
+            const err = data.error || 'Сервер повернув помилку.';
+            throw new Error(err);
           }
 
-          out.textContent = text;
-          status.textContent = 'Готово. Перегляньте журнал вище.';
+          const logLines = data.logs || [];
+          out.textContent = logLines.join('\n');
+
+          const m = data.metrics;
+          const summary = t('gui.summary', {
+            files: m.files || 0,
+            dirs: m.dirs || 0,
+            bytes: formatBytes(m.bytes || 0),
+            skipped: m.skipped || 0,
+            errors: m.errors || 0
+          });
+          status.textContent = summary;
+          hints.textContent = t('gui.hintsDone');
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           out.textContent = out.textContent
             ? `${out.textContent}\n\n[ui] Помилка: ${message}`
             : `[ui] Помилка: ${message}`;
-          status.textContent = 'Не вдалося виконати очищення — перевірте журнал.';
+          status.textContent = t('gui.status.error');
+          hints.textContent = t('gui.hintsError');
         } finally {
           runButton.disabled = false;
         }
       }
+
+      function formatBytes(bytes) {
+        if (!Number.isFinite(bytes) || bytes <= 0) return '0 Б';
+        const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+        let idx = 0;
+        let value = bytes;
+        while (value >= 1024 && idx < units.length - 1) {
+          value /= 1024;
+          idx += 1;
+        }
+        return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`;
+      }
+
+      loadLocales().then(updateUI);
 
       runButton.addEventListener('click', runCleanup);
     </script>

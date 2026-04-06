@@ -4,61 +4,70 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 jobs:
-  lint-and-test:
+  lint-and-format:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
-
       - name: Install dependencies
         run: npm ci
-
-      - name: Run linter
+      - name: Run ESLint
         run: npm run lint
-
-      - name: Check code formatting
+      - name: Check Prettier formatting
         run: npm run format:check
 
-      - name: Run tests with coverage
-        run: npm run test:coverage
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          file: ./coverage/coverage-final.json
-          fail_ci_if_error: false
-
-      - name: Security audit
-        run: npm audit --audit-level=moderate
-
-  test-on-other-platforms:
+  test:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-
+        node-version: [16, 18, 20]
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests with coverage
+        run: npm run test:coverage
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+      - name: Archive coverage results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os }}-node-${{ matrix.node-version }}
+          path: coverage/
 
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
-
       - name: Install dependencies
         run: npm ci
-
-      - name: Run tests
-        run: npm test
+      - name: Run npm audit
+        run: npm audit --audit-level=moderate
+      - name: Check for vulnerable dependencies
+        run: |
+          AUDIT_RESULT=$(npm audit --json || true)
+          echo "$AUDIT_RESULT" | jq -e '.vulnerabilities | length == 0' || (echo "Vulnerabilities found!" && exit 1)
