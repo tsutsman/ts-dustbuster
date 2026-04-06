@@ -881,6 +881,9 @@ const CURRENT_NODE_MAJOR = parseInt(process.versions.node.split('.')[0], 10);
       if (cmd.startsWith('wevtutil.exe el')) {
         return options.encoding === 'utf8' ? 'Application\nSystem\n' : Buffer.from('Application\n');
       }
+      if (cmd.includes('IsInRole')) {
+        return 'True';
+      }
       return '';
     });
     setPlatformOverride('win32');

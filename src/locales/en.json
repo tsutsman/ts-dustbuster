@@ -57,7 +57,8 @@
       "evaluateFailed": "Failed to evaluate {{path}}: {{error}}",
       "removeFailed": "Failed to delete {{path}}: {{error}}",
       "cleanFailed": "Failed to clean {{path}}: {{error}}",
-      "adminRequired": "Administrator privileges are required for deep cleanup."
+      "adminRequired": "Administrator privileges are required for deep cleanup.",
+      "advancedCleanFailed": "Advanced cleanup step \"{{step}}\" failed: {{error}}"
     },
     "preview": {
       "header": "[preview] {{path}}",
@@ -104,31 +105,31 @@
     }
   },
   "gui": {
+    "title": "Temporary files cleanup",
+    "description": "The interface triggers the dustbuster script using the current server settings. Before starting, ensure you have permissions to delete the target directories and that the CLI is properly configured.",
+    "requirementsTitle": "What to know before starting",
+    "actionTitle": "Start cleanup",
+    "hints": "The button below sends an HTTP POST to /clean. If you need to test without deletion, add the --dry-run flag to the server configuration before opening the GUI.",
+    "hintsRunning": "Cleanup in progress... Do not close the page.",
+    "hintsDone": "Cleanup complete. Review the log above.",
+    "hintsError": "To avoid errors, ensure the server is running with proper privileges.",
+    "runButton": "Clean temporary files",
+    "logTitle": "Execution log",
+    "logDesc": "After completion you will see a summary, access warnings, and the path of each deleted item. Copy the data for auditing if needed.",
+    "troubleshooting": "What to do if an error occurs",
+    "troubleshootingList": [
+      "Check that the gui.js server is running and not blocked by a firewall.",
+      "Inspect the CLI log: run node cleaner.js --summary --log dustbuster.log to reproduce manually.",
+      "Use administrator mode or exclude problematic directories for permission issues."
+    ],
+    "footer": "Additional instructions are in the <a href=\"../README.md\" target=\"_blank\" rel=\"noopener\">README</a> and <a href=\"../docs/configuration.md\" target=\"_blank\" rel=\"noopener\">docs/configuration.md</a> sections.",
     "listening": "GUI is available at http://localhost:{{port}}",
-    "actions": {
-      "start": "Clean temporary files",
-      "status": {
-        "idle": "Press the button to start cleaning.",
-        "sent": "Cleanup request submitted…",
-        "done": "Complete. Review the log above.",
-        "failed": "Cleanup failed — check the log."
-      }
+    "status": {
+      "ready": "Press the button to start cleaning.",
+      "running": "Cleanup request submitted…",
+      "done": "Complete. Review the log above.",
+      "error": "Cleanup failed — check the log."
     },
-    "help": {
-      "title": "Temporary files cleanup",
-      "intro": "The interface triggers the dustbuster script using the server configuration.",
-      "requirements": [
-        "Run the tool locally: the GUI has no authentication.",
-        "Windows deep-clean requires administrative privileges.",
-        "Global CLI flags (directories, exclusions, dry-run) are configured on the server side.",
-        "Keep the page open during execution to follow the log.",
-        "Copy the summary for auditing if required."
-      ],
-      "troubleshooting": [
-        "Ensure gui.js is running and not blocked by a firewall.",
-        "Re-run manually with node cleaner.js --summary --log dustbuster.log.",
-        "Adjust permissions or exclude problematic paths if access is denied."
-      ]
-    }
+    "summary": "Summary: files {{files}}, dirs {{dirs}}, skipped {{skipped}}, errors {{errors}}, reclaimed {{bytes}}."
   }
 }

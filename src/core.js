@@ -686,8 +686,11 @@ function getCleanInvoker() {
 
 function isAdmin() {
   try {
-    state.execSyncHandler('net session >nul 2>&1');
-    return true;
+    const result = state.execSyncHandler(
+      'PowerShell -NoLogo -NoProfile -Command "[bool]([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] \'Administrator\')"',
+      { stdio: 'pipe' }
+    );
+    return typeof result === 'string' ? result.trim().toLowerCase() === 'true' : true;
   } catch {
     return false;
   }
@@ -702,17 +705,25 @@ function advancedWindowsClean() {
     state.execSyncHandler('PowerShell -NoLogo -NoProfile -Command "Clear-RecycleBin -Force"', {
       stdio: 'inherit'
     });
-  } catch {}
+  } catch (err) {
+    console.error(
+      t('core.errors.advancedCleanFailed', { step: 'Clear-RecycleBin', error: err.message })
+    );
+  }
   try {
     state.execSyncHandler('dism /online /Cleanup-Image /StartComponentCleanup /ResetBase', {
       stdio: 'inherit'
     });
-  } catch {}
+  } catch (err) {
+    console.error(t('core.errors.advancedCleanFailed', { step: 'DISM', error: err.message }));
+  }
   try {
     state.execSyncHandler('RunDll32.exe InetCpl.cpl,ClearMyTracksByProcess 8', {
       stdio: 'inherit'
     });
-  } catch {}
+  } catch (err) {
+    console.error(t('core.errors.advancedCleanFailed', { step: 'InetCpl', error: err.message }));
+  }
   try {
     const logs = state
       .execSyncHandler('wevtutil.exe el', { encoding: 'utf8' })
@@ -722,10 +733,21 @@ function advancedWindowsClean() {
       if (logName) {
         try {
           state.execSyncHandler(`wevtutil.exe cl "${logName}"`);
-        } catch {}
+        } catch (err) {
+          console.error(
+            t('core.errors.advancedCleanFailed', {
+              step: `wevtutil cl "${logName}"`,
+              error: err.message
+            })
+          );
+        }
       }
     });
-  } catch {}
+  } catch (err) {
+    console.error(
+      t('core.errors.advancedCleanFailed', { step: 'wevtutil el', error: err.message })
+    );
+  }
   try {
     state.execSyncHandler('net stop wuauserv', { stdio: 'inherit' });
     state.execSyncHandler('net stop bits', { stdio: 'inherit' });
@@ -735,7 +757,11 @@ function advancedWindowsClean() {
     });
     state.execSyncHandler('net start wuauserv', { stdio: 'inherit' });
     state.execSyncHandler('net start bits', { stdio: 'inherit' });
-  } catch {}
+  } catch (err) {
+    console.error(
+      t('core.errors.advancedCleanFailed', { step: 'SoftwareDistribution', error: err.message })
+    );
+  }
 }
 
 module.exports = {
