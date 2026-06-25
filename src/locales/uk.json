@@ -58,7 +58,6 @@
       "removeFailed": "Не вдалося видалити {{path}}: {{error}}",
       "cleanFailed": "Не вдалося очистити {{path}}: {{error}}",
       "adminRequired": "Для глибокого очищення потрібні адмінські права",
-      "advancedCleanFailed": "Помилка кроку глибокого очищення \"{{step}}\": {{error}}",
       "advancedCleanFailed": "Помилка кроку глибокого очищення \"{{step}}\": {{error}}"
     },
     "preview": {
