@@ -210,7 +210,7 @@
       const status = document.getElementById('status');
       const hints = document.getElementById('hints');
 
-      let currentLocale = 'uk';
+      let currentLocale = detectLocale();
       let locales = {};
 
       async function loadLocales() {
@@ -224,20 +224,92 @@
         }
       }
 
+      function normalizeLocale(value) {
+        if (!value) {
+          return null;
+        }
+        const lower = String(value).toLowerCase();
+        if (lower.startsWith('uk') || lower.startsWith('ua')) {
+          return 'uk';
+        }
+        if (lower.startsWith('en')) {
+          return 'en';
+        }
+        return null;
+      }
+
+      function detectLocale() {
+        const candidates = [];
+        if (Array.isArray(navigator.languages)) {
+          candidates.push(...navigator.languages);
+        }
+        if (navigator.language) {
+          candidates.push(navigator.language);
+        }
+        for (const candidate of candidates) {
+          const normalized = normalizeLocale(candidate);
+          if (normalized) {
+            return normalized;
+          }
+        }
+        return 'uk';
+      }
+
+      function getTranslationValue(locale, key) {
+        let current = locales[locale];
+        for (const segment of key.split('.')) {
+          if (current && Object.prototype.hasOwnProperty.call(current, segment)) {
+            current = current[segment];
+          } else {
+            return undefined;
+          }
+        }
+        return current;
+      }
+
+      function formatTemplate(template, params = {}) {
+        return String(template).replace(/\{\{(\w+)\}\}/g, (match, token) => {
+          if (Object.prototype.hasOwnProperty.call(params, token)) {
+            return String(params[token]);
+          }
+          return match;
+        });
+      }
+
       function t(key, params = {}) {
-        let msg = key;
-        if (locales[currentLocale] && locales[currentLocale][key]) {
-          msg = locales[currentLocale][key];
-        } else if (locales['en'] && locales['en'][key]) {
-          msg = locales['en'][key];
+        const value =
+          getTranslationValue(currentLocale, key) ||
+          getTranslationValue('uk', key) ||
+          getTranslationValue('en', key);
+
+        if (value === undefined) {
+          return key;
         }
-        for (const [k, v] of Object.entries(params)) {
-          msg = msg.replace(`{${k}}`, v);
+        if (Array.isArray(value)) {
+          return value.map((item) => formatTemplate(item, params)).join('\n');
         }
-        return msg;
+        return formatTemplate(value, params);
+      }
+
+      function updateList(selector, key) {
+        const value =
+          getTranslationValue(currentLocale, key) ||
+          getTranslationValue('uk', key) ||
+          getTranslationValue('en', key);
+
+        if (!Array.isArray(value)) {
+          return;
+        }
+
+        document.querySelectorAll(selector).forEach((item, idx) => {
+          if (value[idx]) {
+            item.textContent = value[idx];
+          }
+        });
       }
 
       function updateUI() {
+        document.documentElement.lang = currentLocale;
         document.querySelector('header h1').textContent = t('gui.title');
         document.querySelector('header p').textContent = t('gui.description');
         document.querySelector('h2#requirements').textContent = t('gui.requirementsTitle');
@@ -248,6 +320,7 @@
         document.querySelector('section[aria-labelledby="log"] p').textContent = t('gui.logDesc');
         document.querySelector('details summary').textContent = t('gui.troubleshooting');
         document.querySelector('footer').innerHTML = t('gui.footer');
+        updateList('details li', 'gui.troubleshootingList');
         status.textContent = t('gui.status.ready');
       }
 
